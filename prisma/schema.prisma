@@ -1,0 +1,745 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===========================================================================
+// Enums
+// ===========================================================================
+
+enum LocationLevel {
+  STATE
+  DISTRICT
+  CITY
+  TEHSIL
+  VILLAGE
+}
+
+enum AuthProvider {
+  MOBILE_OTP
+  EMAIL_OTP
+  PASSWORD
+}
+
+/// Shared editorial lifecycle for every publishable entity (news, directory, leaders).
+enum ContentStatus {
+  DRAFT
+  PENDING_REVIEW
+  SCHEDULED
+  PUBLISHED
+  REJECTED
+  ARCHIVED
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum DirectoryType {
+  ORGANIZATION
+  COMMITTEE
+  SAMAJ_BHAWAN
+  CONTACT
+}
+
+enum LeaderCategory {
+  SARPANCH
+  ELECTED_REPRESENTATIVE
+  SOCIAL_WORKER
+  PRESIDENT
+  COMMITTEE_MEMBER
+  OTHER
+}
+
+/// Content languages. Adding a language = add a value here; no table changes needed.
+enum Lang {
+  hi
+  en
+}
+
+/// Shared lifecycle for inbound messages (feedback, business enquiries).
+enum InboxStatus {
+  NEW
+  IN_PROGRESS
+  CLOSED
+}
+
+enum EventCategory {
+  MEETING
+  CONFERENCE
+  PARICHAY_SAMMELAN
+  CULTURAL
+  RELIGIOUS
+  BLOOD_DONATION
+  SOCIAL_SERVICE
+  EDUCATION
+  SPORTS
+  OTHER
+}
+
+enum RegistrationStatus {
+  CONFIRMED
+  CANCELLED
+}
+
+// ===========================================================================
+// Auth / RBAC
+// ===========================================================================
+
+model Role {
+  id               String           @id @default(cuid())
+  name             String           @unique // SUPER_ADMIN, CONTENT_EDITOR, DISTRICT_ADMIN, CITY_REPORTER, MEMBER ...
+  description      String?
+  /// Location-scoped roles (district admin, city reporter) may only act inside their own location subtree.
+  isLocationScoped Boolean          @default(false)
+  permissions      RolePermission[]
+  users            User[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+}
+
+model Permission {
+  id    String           @id @default(cuid())
+  key   String           @unique // news.create, news.review, directory.manage ...
+  label String
+  roles RolePermission[]
+}
+
+model RolePermission {
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  roleId       String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  permissionId String
+
+  @@id([roleId, permissionId])
+}
+
+model User {
+  id               String    @id @default(cuid())
+  name             String?
+  mobile           String?   @unique
+  email            String?   @unique
+  passwordHash     String?
+  googleId         String?   @unique
+  avatarUrl        String?
+  failedLogins     Int       @default(0)
+  lockedUntil      DateTime?
+  lastLoginAt      DateTime?
+  isMobileVerified Boolean   @default(false)
+  isEmailVerified  Boolean   @default(false)
+  isActive         Boolean   @default(true)
+  isSuspended      Boolean   @default(false)
+
+  roleId String?
+  role   Role?   @relation(fields: [roleId], references: [id])
+
+  /// Home location. For location-scoped roles this is the root of their authority.
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id])
+
+  otpCodes             OtpCode[]
+  refreshTokens        RefreshToken[]
+  emailTokens          EmailVerificationToken[]
+  newsArticles         News[]                   @relation("NewsAuthor")
+  directorySubmissions DirectoryEntry[]         @relation("DirectorySubmitter")
+  leaderProfilesMade   LeaderProfile[]          @relation("LeaderCreator")
+  leaderProfile        LeaderProfile?           @relation("LeaderAccount")
+  eventsCreated        Event[]                  @relation("EventCreator")
+  eventRegistrations   EventRegistration[]
+  businesses           Business[]               @relation("BusinessOwner")
+  businessEnquiries    BusinessEnquiry[]
+  uploads              Media[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([roleId])
+  @@index([locationId])
+}
+
+model OtpCode {
+  id         String       @id @default(cuid())
+  user       User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String?
+  identifier String
+  provider   AuthProvider
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int          @default(0)
+  createdAt  DateTime     @default(now())
+
+  @@index([identifier])
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  tokenHash String    @unique
+  familyId  String
+  expiresAt DateTime
+  revokedAt DateTime?
+  userAgent String?
+  ip        String?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([familyId])
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Feedback {
+  id        String      @id @default(cuid())
+  name      String?
+  email     String?
+  category  String      @default("general")
+  message   String
+  userId    String?
+  ip        String?
+  status    InboxStatus @default(NEW)
+  adminNote String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @default(now()) @updatedAt
+
+  @@index([createdAt])
+  @@index([status, createdAt])
+}
+
+/// Every uploaded file. Lets admins find/reuse images and gives cleanup jobs a source of truth.
+model Media {
+  id           String   @id @default(cuid())
+  url          String   @unique
+  mime         String
+  size         Int
+  uploadedById String?
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+
+  @@index([uploadedById, createdAt])
+  @@index([createdAt])
+}
+
+/// Append-only trail of every privileged action (publish, verify, role change ...).
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  meta       Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+}
+
+// ===========================================================================
+// Location hierarchy: State -> District -> City -> Tehsil -> Village
+//
+// `path` is a materialized slug path ("rajasthan/jaipur") so a whole subtree is
+// one prefix query. Content rows additionally store stateId/districtId/cityId
+// (denormalised at write time) so location filters are plain indexed equality.
+// ===========================================================================
+
+model Location {
+  id        String        @id @default(cuid())
+  nameHi    String
+  nameEn    String
+  level     LocationLevel
+  slug      String
+  path      String        @unique
+  parentId  String?
+  parent    Location?     @relation("LocationTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children  Location[]    @relation("LocationTree")
+  isActive  Boolean       @default(true)
+  sortOrder Int           @default(0)
+
+  users      User[]
+  news       News[]
+  directory  DirectoryEntry[]
+  leaders    LeaderProfile[]
+  events     Event[]
+  businesses Business[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([parentId, slug])
+  @@index([parentId, isActive])
+  @@index([level, isActive])
+}
+
+// ===========================================================================
+// Module 1: News
+// ===========================================================================
+
+model Category {
+  id        String     @id @default(cuid())
+  slug      String     @unique
+  nameHi    String
+  nameEn    String
+  parentId  String?
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryTree")
+  sortOrder Int        @default(0)
+  isActive  Boolean    @default(true)
+  news      News[]
+  createdAt DateTime   @default(now())
+}
+
+model Tag {
+  id        String    @id @default(cuid())
+  slug      String    @unique
+  nameHi    String
+  nameEn    String
+  news      NewsTag[]
+  createdAt DateTime  @default(now())
+}
+
+model News {
+  id     String        @id @default(cuid())
+  slug   String        @unique
+  status ContentStatus @default(DRAFT)
+
+  isBreaking Boolean @default(false)
+  isFeatured Boolean @default(false)
+
+  coverImageUrl String?
+  /// Optional YouTube video shown at the top of the story (canonical watch URL).
+  videoUrl      String?
+  sourceName    String?
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id])
+  stateId    String?
+  districtId String?
+  cityId     String?
+
+  authorId String?
+  author   User?   @relation("NewsAuthor", fields: [authorId], references: [id])
+
+  reviewedById    String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+
+  publishedAt DateTime?
+  scheduledAt DateTime?
+  viewCount   Int       @default(0)
+
+  translations NewsTranslation[]
+  tags         NewsTag[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, publishedAt(sort: Desc)])
+  @@index([stateId, status, publishedAt(sort: Desc)])
+  @@index([districtId, status, publishedAt(sort: Desc)])
+  @@index([cityId, status, publishedAt(sort: Desc)])
+  @@index([categoryId, status, publishedAt(sort: Desc)])
+  @@index([authorId, updatedAt(sort: Desc)])
+  @@index([status, scheduledAt])
+}
+
+model NewsTranslation {
+  id              String  @id @default(cuid())
+  news            News    @relation(fields: [newsId], references: [id], onDelete: Cascade)
+  newsId          String
+  lang            Lang
+  title           String
+  excerpt         String?
+  /// Sanitised HTML (allow-list applied on write).
+  body            String
+  imageAlt        String?
+  metaTitle       String?
+  metaDescription String?
+
+  @@unique([newsId, lang])
+}
+
+model NewsTag {
+  news   News   @relation(fields: [newsId], references: [id], onDelete: Cascade)
+  newsId String
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  tagId  String
+
+  @@id([newsId, tagId])
+  @@index([tagId])
+}
+
+// ===========================================================================
+// Module 2: Samaj Directory
+// ===========================================================================
+
+model DirectoryEntry {
+  id           String             @id @default(cuid())
+  slug         String             @unique
+  type         DirectoryType
+  status       ContentStatus      @default(PENDING_REVIEW)
+  verification VerificationStatus @default(UNVERIFIED)
+
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id])
+  stateId    String?
+  districtId String?
+  cityId     String?
+
+  pincode   String?
+  latitude  Float?
+  longitude Float?
+
+  phone           String?
+  altPhone        String?
+  email           String?
+  website         String?
+  socials         Json?
+  /// When false, phone/email are hidden from public responses (personal contacts).
+  isContactPublic Boolean @default(true)
+
+  coverImageUrl   String?
+  establishedYear Int?
+  sortOrder       Int     @default(0)
+
+  submittedById String?
+  submittedBy   User?   @relation("DirectorySubmitter", fields: [submittedById], references: [id])
+
+  reviewedById    String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+  verifiedAt      DateTime?
+
+  translations DirectoryTranslation[]
+  leaders      LeaderProfile[]
+  events       Event[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, type, sortOrder])
+  @@index([stateId, status, type])
+  @@index([districtId, status, type])
+  @@index([cityId, status, type])
+  @@index([submittedById])
+}
+
+model DirectoryTranslation {
+  id          String         @id @default(cuid())
+  entry       DirectoryEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  entryId     String
+  lang        Lang
+  name        String
+  description String?
+  address     String?
+
+  @@unique([entryId, lang])
+}
+
+// ===========================================================================
+// Module 3: Leadership & Public Representatives
+// ===========================================================================
+
+model LeaderProfile {
+  id           String             @id @default(cuid())
+  slug         String             @unique
+  category     LeaderCategory
+  status       ContentStatus      @default(PENDING_REVIEW)
+  verification VerificationStatus @default(UNVERIFIED)
+
+  photoUrl String?
+
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id])
+  stateId    String?
+  districtId String?
+  cityId     String?
+
+  organizationId String?
+  organization   DirectoryEntry? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  termStart DateTime? @db.Date
+  termEnd   DateTime? @db.Date
+
+  phone           String?
+  email           String?
+  socials         Json?
+  /// Personal contact details stay private unless the leader/admin explicitly opts in.
+  isContactPublic Boolean @default(false)
+
+  /// Optional link to the member account that manages/claims this profile.
+  userId String? @unique
+  user   User?   @relation("LeaderAccount", fields: [userId], references: [id], onDelete: SetNull)
+
+  createdById String?
+  createdBy   User?   @relation("LeaderCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  reviewedById    String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+  verifiedById    String?
+  verifiedAt      DateTime?
+
+  sortOrder Int @default(0)
+
+  translations LeaderTranslation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, category, sortOrder])
+  @@index([stateId, status, category])
+  @@index([districtId, status, category])
+  @@index([cityId, status, category])
+  @@index([organizationId])
+}
+
+model LeaderTranslation {
+  id          String        @id @default(cuid())
+  leader      LeaderProfile @relation(fields: [leaderId], references: [id], onDelete: Cascade)
+  leaderId    String
+  lang        Lang
+  name        String
+  designation String?
+  bio         String?
+
+  @@unique([leaderId, lang])
+}
+
+// ===========================================================================
+// Module 4: Community Events
+// ===========================================================================
+
+model Event {
+  id       String        @id @default(cuid())
+  slug     String        @unique
+  status   ContentStatus @default(DRAFT)
+  category EventCategory
+
+  startsAt DateTime
+  endsAt   DateTime?
+
+  /// Online events carry a join link instead of (or in addition to) a venue.
+  isOnline  Boolean @default(false)
+  onlineUrl String?
+
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id])
+  stateId    String?
+  districtId String?
+  cityId     String?
+  pincode    String?
+  latitude   Float?
+  longitude  Float?
+
+  coverImageUrl String?
+  /// Up to 30 image URLs (event gallery), same allow-list as cover images.
+  gallery       Json?
+
+  organizerName   String?
+  organizerPhone  String?
+  organizerEmail  String?
+  isContactPublic Boolean @default(true)
+
+  organizationId String?
+  organization   DirectoryEntry? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  registrationEnabled  Boolean   @default(false)
+  registrationDeadline DateTime?
+  /// Maximum attendees (sum of party sizes). Null = unlimited.
+  capacity             Int?
+  /// Attendees currently booked; maintained atomically so capacity can never be oversold.
+  seatsTaken           Int       @default(0)
+  /// Entry fee in whole rupees. Null or 0 = free. Collected offline until payments ship.
+  feeAmount            Int?
+
+  isFeatured Boolean @default(false)
+
+  createdById String?
+  createdBy   User?   @relation("EventCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  reviewedById    String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+  publishedAt     DateTime?
+
+  translations  EventTranslation[]
+  registrations EventRegistration[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, startsAt])
+  @@index([stateId, status, startsAt])
+  @@index([districtId, status, startsAt])
+  @@index([cityId, status, startsAt])
+  @@index([category, status, startsAt])
+  @@index([createdById, updatedAt(sort: Desc)])
+}
+
+model EventTranslation {
+  id          String  @id @default(cuid())
+  event       Event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId     String
+  lang        Lang
+  title       String
+  summary     String?
+  /// Sanitised HTML (same allow-list as news bodies).
+  description String?
+  venue       String?
+  address     String?
+  feeNote     String?
+
+  @@unique([eventId, lang])
+}
+
+model EventRegistration {
+  id          String             @id @default(cuid())
+  event       Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId     String
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  name        String
+  phone       String
+  attendees   Int                @default(1)
+  note        String?
+  status      RegistrationStatus @default(CONFIRMED)
+  cancelledAt DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@unique([eventId, userId])
+  @@index([eventId, status, createdAt])
+  @@index([userId, createdAt])
+}
+
+// ===========================================================================
+// Module 5: Business Directory
+// ===========================================================================
+
+model BusinessCategory {
+  id         String     @id @default(cuid())
+  slug       String     @unique
+  nameHi     String
+  nameEn     String
+  /// lucide icon name used by the UI (e.g. "hammer", "store"); display-only.
+  icon       String?
+  sortOrder  Int        @default(0)
+  isActive   Boolean    @default(true)
+  businesses Business[]
+  createdAt  DateTime   @default(now())
+}
+
+model Business {
+  id           String             @id @default(cuid())
+  slug         String             @unique
+  status       ContentStatus      @default(PENDING_REVIEW)
+  verification VerificationStatus @default(UNVERIFIED)
+
+  categoryId String
+  category   BusinessCategory @relation(fields: [categoryId], references: [id])
+
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id])
+  stateId    String?
+  districtId String?
+  cityId     String?
+  pincode    String?
+  latitude   Float?
+  longitude  Float?
+
+  phone    String?
+  whatsapp String?
+  email    String?
+  website  String?
+  socials  Json?
+
+  logoUrl       String?
+  coverImageUrl String?
+  /// Up to 12 product/shop photos.
+  gallery       Json?
+
+  establishedYear Int?
+
+  /// Paid placement: shown first while featuredUntil is in the future (null = until turned off).
+  isFeatured    Boolean   @default(false)
+  featuredUntil DateTime?
+
+  ownerId String?
+  owner   User?   @relation("BusinessOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  reviewedById    String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+  verifiedAt      DateTime?
+  sortOrder       Int       @default(0)
+
+  translations BusinessTranslation[]
+  enquiries    BusinessEnquiry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, isFeatured, sortOrder])
+  @@index([categoryId, status])
+  @@index([stateId, status])
+  @@index([districtId, status])
+  @@index([cityId, status])
+  @@index([ownerId])
+}
+
+model BusinessTranslation {
+  id          String   @id @default(cuid())
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  businessId  String
+  lang        Lang
+  name        String
+  tagline     String?
+  description String?
+  address     String?
+  /// Current offers / discounts, plain text.
+  offers      String?
+
+  @@unique([businessId, lang])
+}
+
+/// A lead: a visitor asking a business to get in touch. Visible to the owner and managers only.
+model BusinessEnquiry {
+  id         String      @id @default(cuid())
+  business   Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  businessId String
+  userId     String?
+  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name       String
+  phone      String
+  email      String?
+  message    String
+  status     InboxStatus @default(NEW)
+  ip         String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@index([businessId, status, createdAt])
+  @@index([status, createdAt])
+}
