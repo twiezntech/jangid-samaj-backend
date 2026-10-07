@@ -714,4 +714,43 @@ const businesses: BusinessSeed[] = [
   },
 ];
 
-export const demo = { locations, categories, tags, news, directory, leaders, events, businessCategories, businesses };
+interface AchievementSeed {
+  slug: string;
+  category: "STUDENT" | "PROFESSIONAL" | "ENTREPRENEUR" | "SPORTS" | "SOCIAL" | "OTHER";
+  location: string;
+  image?: string;
+  on: string;
+  featured?: boolean;
+  hi: { personName: string; title: string; description: string };
+  en: { personName: string; title: string; description: string };
+}
+
+const achievements: AchievementSeed[] = [
+  {
+    slug: "kavya-jangid-upsc-air-84", category: "STUDENT", location: "rajasthan/jaipur/jaipur", image: U("1503428593586-e225b39bddfe"), on: "2026-05-14", featured: true,
+    hi: { personName: "काव्या जांगिड़", title: "यूपीएससी सिविल सेवा परीक्षा में अखिल भारतीय रैंक 84", description: "जयपुर की काव्या ने तीसरे प्रयास में यह सफलता पाई। उन्होंने समाज की बेटियों के लिए निःशुल्क मार्गदर्शन का वादा किया है।" },
+    en: { personName: "Kavya Jangid", title: "All India Rank 84 in the UPSC Civil Services Examination", description: "Kavya from Jaipur cleared the exam in her third attempt and has promised free guidance for the community's daughters." },
+  },
+  {
+    slug: "rohit-jangid-national-wrestling-gold", category: "SPORTS", location: "haryana/rohtak/rohtak", image: U("1529156069898-49953e39b3ac"), on: "2026-03-02", featured: true,
+    hi: { personName: "रोहित जांगिड़", title: "राष्ट्रीय कुश्ती चैंपियनशिप में स्वर्ण पदक", description: "रोहतक के रोहित ने 74 किलो वर्ग में स्वर्ण जीतकर हरियाणा का नाम रोशन किया।" },
+    en: { personName: "Rohit Jangid", title: "Gold medal at the National Wrestling Championship", description: "Rohit from Rohtak won gold in the 74 kg category, making Haryana proud." },
+  },
+  {
+    slug: "meena-jangid-furniture-export-award", category: "ENTREPRENEUR", location: "rajasthan/jodhpur/jodhpur", image: U("1556761175-5973dc0f32e7"), on: "2026-01-20",
+    hi: { personName: "मीना जांगिड़", title: "हस्तशिल्प फर्नीचर निर्यात के लिए राज्य स्तरीय पुरस्कार", description: "जोधपुर में 40 कारीगर परिवारों को रोज़गार देने वाली मीना की इकाई अब 12 देशों में निर्यात करती है।" },
+    en: { personName: "Meena Jangid", title: "State award for handicraft furniture exports", description: "Meena's unit in Jodhpur employs 40 artisan families and now exports to 12 countries." },
+  },
+  {
+    slug: "dr-anil-jangid-rural-health-camps", category: "SOCIAL", location: "madhya-pradesh/indore/indore", image: U("1469571486292-0ba58a3f068b"), on: "2025-12-10",
+    hi: { personName: "डॉ. अनिल जांगिड़", title: "ग्रामीण क्षेत्रों में 100 निःशुल्क स्वास्थ्य शिविर पूरे", description: "इंदौर के डॉ. अनिल ने पाँच वर्षों में 100 शिविर लगाकर 25,000 से अधिक ग्रामीणों की जाँच की।" },
+    en: { personName: "Dr. Anil Jangid", title: "Completed 100 free rural health camps", description: "Dr. Anil of Indore ran 100 camps in five years, screening more than 25,000 villagers." },
+  },
+  {
+    slug: "pooja-jangid-isro-scientist", category: "PROFESSIONAL", location: "delhi/new-delhi/new-delhi", image: U("1477587458883-47145ed94245"), on: "2026-02-18",
+    hi: { personName: "पूजा जांगिड़", title: "इसरो में वैज्ञानिक के रूप में चयन", description: "दिल्ली की पूजा अब उपग्रह नियंत्रण प्रणाली पर काम करेंगी।" },
+    en: { personName: "Pooja Jangid", title: "Selected as a scientist at ISRO", description: "Pooja from Delhi will now work on satellite control systems." },
+  },
+];
+
+export const demo = { locations, categories, tags, news, directory, leaders, events, businessCategories, businesses, achievements };

@@ -21,6 +21,8 @@ import { adminRouter } from "./modules/admin/admin.routes";
 import { sitemapRouter } from "./modules/sitemap/sitemap.routes";
 import { eventsRouter } from "./modules/events/events.routes";
 import { businessRouter } from "./modules/business/business.routes";
+import { achievementsRouter } from "./modules/achievements/achievements.routes";
+import { gotraRouter } from "./modules/gotra/gotra.routes";
 import { serveUploads, uploadRouter } from "./modules/uploads/upload.routes";
 
 export const app = express();
@@ -47,7 +49,7 @@ app.use(cors({ origin: env.corsOrigins, credentials: true, maxAge: 600 }));
 // Article bodies are large; everything else stays tiny to shrink the abuse surface.
 const smallJson = express.json({ limit: "16kb" });
 const contentJson = express.json({ limit: "600kb" });
-app.use((req: Request, res: Response, next: NextFunction) => (/^\/api\/v1\/(news|directory|leaders|events|business)/.test(req.path) ? contentJson : smallJson)(req, res, next));
+app.use((req: Request, res: Response, next: NextFunction) => (/^\/api\/v1\/(news|directory|leaders|events|business|achievements)/.test(req.path) ? contentJson : smallJson)(req, res, next));
 app.use(cookieParser());
 
 // Uploaded images (random, immutable names). Registered before the 404 handler.
@@ -76,6 +78,8 @@ v1.use("/directory", directoryRouter);
 v1.use("/leaders", leadersRouter);
 v1.use("/events", eventsRouter);
 v1.use("/business", businessRouter);
+v1.use("/achievements", achievementsRouter);
+v1.use("/gotra", gotraRouter);
 v1.use("/uploads", uploadRouter);
 v1.use("/admin", adminRouter);
 v1.use("/sitemap", sitemapRouter);

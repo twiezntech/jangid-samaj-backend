@@ -17,6 +17,7 @@ export function client() {
     post: (url: string, body?: object) => agent.post(`${API}${url}`).set("Origin", ORIGIN).send(body ?? {}),
     patch: (url: string, body?: object) => agent.patch(`${API}${url}`).set("Origin", ORIGIN).send(body ?? {}),
     put: (url: string, body?: object) => agent.put(`${API}${url}`).set("Origin", ORIGIN).send(body ?? {}),
+    delete: (url: string) => agent.delete(`${API}${url}`).set("Origin", ORIGIN),
     upload: (url: string, file: Buffer, name = "file.bin") => agent.post(`${API}${url}`).set("Origin", ORIGIN).attach("file", file, name),
   };
 }

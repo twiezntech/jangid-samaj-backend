@@ -89,6 +89,15 @@ enum RegistrationStatus {
   CANCELLED
 }
 
+enum AchievementCategory {
+  STUDENT
+  PROFESSIONAL
+  ENTREPRENEUR
+  SPORTS
+  SOCIAL
+  OTHER
+}
+
 // ===========================================================================
 // Auth / RBAC
 // ===========================================================================
@@ -155,6 +164,7 @@ model User {
   eventRegistrations   EventRegistration[]
   businesses           Business[]               @relation("BusinessOwner")
   businessEnquiries    BusinessEnquiry[]
+  achievementsMade     Achievement[]            @relation("AchievementCreator")
   uploads              Media[]
 
   createdAt DateTime @default(now())
@@ -274,12 +284,13 @@ model Location {
   isActive  Boolean       @default(true)
   sortOrder Int           @default(0)
 
-  users      User[]
-  news       News[]
-  directory  DirectoryEntry[]
-  leaders    LeaderProfile[]
-  events     Event[]
-  businesses Business[]
+  users        User[]
+  news         News[]
+  directory    DirectoryEntry[]
+  leaders      LeaderProfile[]
+  events       Event[]
+  businesses   Business[]
+  achievements Achievement[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -742,4 +753,98 @@ model BusinessEnquiry {
 
   @@index([businessId, status, createdAt])
   @@index([status, createdAt])
+}
+
+// ===========================================================================
+// Phase 2 - Module 6: Community Achievements
+// ===========================================================================
+
+model Achievement {
+  id       String              @id @default(cuid())
+  slug     String              @unique
+  category AchievementCategory
+  status   ContentStatus       @default(PENDING_REVIEW)
+
+  photoUrl   String?
+  achievedOn DateTime? @db.Date
+
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id])
+  stateId    String?
+  districtId String?
+  cityId     String?
+
+  /// Highlighted on the homepage / top of lists (managers only).
+  isFeatured Boolean @default(false)
+
+  createdById String?
+  createdBy   User?   @relation("AchievementCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  reviewedById    String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+  sortOrder       Int       @default(0)
+
+  translations AchievementTranslation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, isFeatured, achievedOn(sort: Desc)])
+  @@index([category, status])
+  @@index([stateId, status])
+  @@index([districtId, status])
+  @@index([cityId, status])
+  @@index([createdById])
+}
+
+model AchievementTranslation {
+  id            String      @id @default(cuid())
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  achievementId String
+  lang          Lang
+  /// Who achieved it.
+  personName    String
+  /// What was achieved (headline).
+  title         String
+  description   String?
+
+  @@unique([achievementId, lang])
+}
+
+// ===========================================================================
+// Phase 3 - Gotra master data (used by matrimony / family fields later)
+// ===========================================================================
+
+/// Gotra-kar rishi (the sage a gotra descends from).
+model Rishi {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  nameEn    String
+  nameHi    String?
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  gotras    Gotra[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+model Gotra {
+  id        String   @id @default(cuid())
+  nameEn    String
+  nameHi    String?
+  /// Lower-cased letters/digits of nameEn. Unique, so "Aslia", "ASLIA" and "A-slia" can never be added twice.
+  nameKey   String   @unique
+  /// Restrict: a rishi that still has gotras cannot be deleted.
+  rishiId   String?
+  rishi     Rishi?   @relation(fields: [rishiId], references: [id], onDelete: Restrict)
+  /// Hidden gotras stay in the table (profiles may reference them) but disappear from pickers and the website.
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, nameEn])
+  @@index([rishiId, isActive])
 }

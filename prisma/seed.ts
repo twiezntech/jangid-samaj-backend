@@ -8,6 +8,8 @@ import bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
 import { PrismaClient, type LocationLevel } from "@prisma/client";
 import { demo } from "./seed-data";
+import { GOTRAS, RISHIS } from "./gotra-data";
+import { nameKey } from "../src/lib/slug";
 
 const prisma = new PrismaClient();
 const isProd = process.env.NODE_ENV === "production";
@@ -25,6 +27,10 @@ const PERMISSIONS: Record<string, string> = {
   "event.manage": "Create, publish and manage events and registrations",
   "business.submit": "Submit a business listing for review",
   "business.manage": "Approve, verify and feature business listings; read enquiries",
+  "achievement.submit": "Submit community achievements for review",
+  "achievement.manage": "Manage, approve and feature community achievements",
+  "achievement.delete": "Permanently delete community achievements (super admin only)",
+  "gotra.manage": "Manage gotra and rishi master data",
   "feedback.read": "Read and respond to feedback messages",
   "media.upload": "Upload images",
   "dashboard.view": "Open the admin panel",
@@ -41,20 +47,20 @@ const ROLES: { name: string; description: string; scoped: boolean; permissions: 
     scoped: false,
     permissions: [
       "news.create", "news.edit.any", "news.review", "directory.manage", "leader.manage", "taxonomy.manage",
-      "event.manage", "business.manage", "feedback.read", "media.upload", "dashboard.view",
+      "event.manage", "business.manage", "achievement.manage", "gotra.manage", "feedback.read", "media.upload", "dashboard.view",
     ],
   },
   {
     name: "DISTRICT_ADMIN",
     description: "Manages content inside their district",
     scoped: true,
-    permissions: ["news.create", "news.edit.any", "news.review", "directory.manage", "leader.manage", "event.manage", "business.manage", "media.upload", "dashboard.view"],
+    permissions: ["news.create", "news.edit.any", "news.review", "directory.manage", "leader.manage", "event.manage", "business.manage", "achievement.manage", "media.upload", "dashboard.view"],
   },
   {
     name: "CITY_REPORTER",
     description: "Reports from their city",
     scoped: true,
-    permissions: ["news.create", "directory.submit", "leader.submit", "business.submit", "media.upload", "dashboard.view"],
+    permissions: ["news.create", "directory.submit", "leader.submit", "business.submit", "achievement.submit", "media.upload", "dashboard.view"],
   },
   {
     name: "SALES_MANAGER",
@@ -63,7 +69,7 @@ const ROLES: { name: string; description: string; scoped: boolean; permissions: 
     permissions: ["business.manage", "media.upload", "dashboard.view"],
   },
   { name: "SUPPORT", description: "Answers member feedback and support requests", scoped: false, permissions: ["feedback.read", "dashboard.view"] },
-  { name: "MEMBER", description: "Registered community member", scoped: false, permissions: ["directory.submit", "leader.submit", "business.submit", "media.upload"] },
+  { name: "MEMBER", description: "Registered community member", scoped: false, permissions: ["directory.submit", "leader.submit", "business.submit", "achievement.submit", "media.upload"] },
 ];
 
 async function seedRbac() {
@@ -221,6 +227,35 @@ async function seedDemoContent(authorId: string) {
   }
 }
 
+/** Master data, safe to re-run: only missing rows are inserted, so admin edits are never overwritten and names are never duplicated. */
+async function seedGotra() {
+  await prisma.rishi.createMany({ data: RISHIS, skipDuplicates: true });
+  const idBySlug = new Map((await prisma.rishi.findMany({ select: { id: true, slug: true } })).map((r) => [r.slug, r.id]));
+  const data = Object.entries(GOTRAS).flatMap(([rishi, names]) => names.map((nameEn) => ({ nameEn, nameKey: nameKey(nameEn), rishiId: (rishi && idBySlug.get(rishi)) || null })));
+  const { count } = await prisma.gotra.createMany({ data, skipDuplicates: true });
+  console.log(`Gotra master data: ${count} added, ${data.length - count} already present`);
+}
+
+async function seedAchievements(authorId: string) {
+  for (const a of demo.achievements) {
+    const refs = await refsFor(a.location);
+    const data = {
+      category: a.category,
+      status: "PUBLISHED" as const,
+      photoUrl: a.image ?? null,
+      achievedOn: new Date(a.on),
+      isFeatured: !!a.featured,
+      createdById: authorId,
+      ...refs,
+    };
+    const row = await prisma.achievement.upsert({ where: { slug: a.slug }, create: { slug: a.slug, ...data }, update: data });
+    for (const lang of ["hi", "en"] as const) {
+      const t = a[lang];
+      await prisma.achievementTranslation.upsert({ where: { achievementId_lang: { achievementId: row.id, lang } }, create: { achievementId: row.id, lang, ...t }, update: t });
+    }
+  }
+}
+
 async function seedEventsAndBusinesses(authorId: string) {
   for (const e of demo.events) {
     const refs = await refsFor(e.location);
@@ -279,6 +314,7 @@ async function main() {
   await seedRbac();
   await seedLocations();
   await seedTaxonomy();
+  await seedGotra();
 
   const adminEmail = process.env.SEED_ADMIN_EMAIL;
   const adminPassword = process.env.SEED_ADMIN_PASSWORD;
@@ -304,6 +340,7 @@ async function main() {
   await seedAccount("support@jangidsamaj.local", "Support Desk", password, "SUPPORT", undefined, fixed);
   await seedDemoContent(admin.id);
   await seedEventsAndBusinesses(admin.id);
+  await seedAchievements(admin.id);
 
   console.log("\nSeed complete. Dev accounts (all verified):");
   console.log(`  admin@jangidsamaj.local  password: ${adminPassword || fixed ? "(from .env)" : password}`);

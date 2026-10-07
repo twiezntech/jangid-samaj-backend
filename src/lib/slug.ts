@@ -10,6 +10,9 @@ export function slugify(input: string): string {
     .slice(0, 70);
 }
 
+/** Identity of a name regardless of case, spaces and punctuation ("A-slia" == "Aslia"). */
+export const nameKey = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
+
 export const randomSuffix = (bytes = 3) => randomBytes(bytes).toString("hex");
 
 /** Returns a slug that does not exist yet according to `exists`. */

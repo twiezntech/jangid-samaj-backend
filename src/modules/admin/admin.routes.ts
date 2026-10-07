@@ -46,7 +46,7 @@ adminRouter.get(
 
     const [
       newsPublished, newsPending, newsScheduled, directoryPublished, directoryPending, leadersPublished, leadersPending,
-      eventsUpcoming, eventDrafts, registrations30d, businessesPublished, businessesPending, enquiriesNew, feedbackNew, usersTotal, usersNew30d,
+      eventsUpcoming, eventDrafts, registrations30d, businessesPublished, businessesPending, enquiriesNew, achievementsPublished, achievementsPending, feedbackNew, usersTotal, usersNew30d,
     ] = await Promise.all([
       prisma.news.count({ where: { ...scope, status: "PUBLISHED" } }),
       prisma.news.count({ where: { ...scope, status: "PENDING_REVIEW" } }),
@@ -61,6 +61,8 @@ adminRouter.get(
       prisma.business.count({ where: { ...scope, status: "PUBLISHED" } }),
       prisma.business.count({ where: { ...scope, status: "PENDING_REVIEW" } }),
       prisma.businessEnquiry.count({ where: { status: "NEW", business: scope } }),
+      prisma.achievement.count({ where: { ...scope, status: "PUBLISHED" } }),
+      prisma.achievement.count({ where: { ...scope, status: "PENDING_REVIEW" } }),
       can(actor, "feedback.read") ? prisma.feedback.count({ where: { status: "NEW" } }) : Promise.resolve(null),
       can(actor, "user.manage") ? prisma.user.count() : Promise.resolve(null),
       can(actor, "user.manage") ? prisma.user.count({ where: { createdAt: { gte: monthAgo } } }) : Promise.resolve(null),
@@ -83,6 +85,7 @@ adminRouter.get(
         leaders: { published: leadersPublished, pending: leadersPending },
         events: { upcoming: eventsUpcoming, drafts: eventDrafts, registrations30d },
         business: { published: businessesPublished, pending: businessesPending, newEnquiries: enquiriesNew },
+        achievements: { published: achievementsPublished, pending: achievementsPending },
       },
       inbox: { feedbackNew },
       users: usersTotal === null ? null : { total: usersTotal, new30d: usersNew30d },
