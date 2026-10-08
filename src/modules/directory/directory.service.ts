@@ -4,6 +4,7 @@ import { prisma } from "../../config/prisma";
 import { ApiError } from "../../utils/apiError";
 import { Actor, can, inScope } from "../../lib/access";
 import { audit } from "../../lib/audit";
+import { notifyReview } from "../../lib/notify";
 import { byLang } from "../../lib/i18n";
 import { toPage } from "../../lib/pagination";
 import { cleanText } from "../../lib/sanitize";
@@ -213,6 +214,7 @@ export async function transitionEntry(actor: Actor, id: string, action: Director
   return prisma.$transaction(async (tx) => {
     const updated = await tx.directoryEntry.update({ where: { id }, data, select: { id: true, slug: true, status: true, verification: true } });
     await audit(tx, { actorId: actor.id, action: `directory.${action}`, entityType: "DirectoryEntry", entityId: id, meta: { from: entry.status, to }, ip });
+    await notifyReview(tx, { userId: entry.submittedById, actorId: actor.id, kind: "directory", action, reason, link: `/directory/${updated.slug}` });
     return updated;
   });
 }

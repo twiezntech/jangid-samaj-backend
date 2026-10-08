@@ -3,6 +3,7 @@ import { prisma } from "../../config/prisma";
 import { ApiError } from "../../utils/apiError";
 import { Actor, can, inScope } from "../../lib/access";
 import { audit } from "../../lib/audit";
+import { notifyReview } from "../../lib/notify";
 import { LANGS, byLang } from "../../lib/i18n";
 import { toPage } from "../../lib/pagination";
 import { cleanHtml, cleanText, stripHtml } from "../../lib/sanitize";
@@ -21,6 +22,7 @@ const listSelect = {
   slug: true,
   isBreaking: true,
   isFeatured: true,
+  isSponsored: true,
   coverImageUrl: true,
   videoUrl: true,
   sourceName: true,
@@ -148,9 +150,9 @@ async function categoryId(slug: string | null | undefined) {
   return c.id;
 }
 
-function assertFlags(actor: Actor, input: { isBreaking?: boolean; isFeatured?: boolean }) {
-  if ((input.isBreaking !== undefined || input.isFeatured !== undefined) && !can(actor, "news.review")) {
-    throw ApiError.forbidden("Only editors can mark stories breaking or featured", "FORBIDDEN");
+function assertFlags(actor: Actor, input: { isBreaking?: boolean; isFeatured?: boolean; isSponsored?: boolean }) {
+  if ((input.isBreaking !== undefined || input.isFeatured !== undefined || input.isSponsored !== undefined) && !can(actor, "news.review")) {
+    throw ApiError.forbidden("Only editors can mark stories breaking, featured or sponsored", "FORBIDDEN");
   }
 }
 
@@ -174,6 +176,7 @@ export async function createNews(actor: Actor, input: CreateNewsInput, ip?: stri
         status: "DRAFT",
         isBreaking: input.isBreaking ?? false,
         isFeatured: input.isFeatured ?? false,
+        isSponsored: input.isSponsored ?? false,
         coverImageUrl: input.coverImageUrl ?? null,
         videoUrl: input.videoUrl ?? null,
         sourceName: input.sourceName ? cleanText(input.sourceName) : null,
@@ -240,6 +243,7 @@ export async function updateNews(actor: Actor, id: string, input: UpdateNewsInpu
         ...(input.sourceName !== undefined ? { sourceName: input.sourceName ? cleanText(input.sourceName) : null } : {}),
         ...(input.isBreaking !== undefined ? { isBreaking: input.isBreaking } : {}),
         ...(input.isFeatured !== undefined ? { isFeatured: input.isFeatured } : {}),
+        ...(input.isSponsored !== undefined ? { isSponsored: input.isSponsored } : {}),
       },
       select: { id: true, slug: true, status: true },
     });
@@ -285,6 +289,7 @@ export async function transitionNews(actor: Actor, id: string, action: WorkflowA
   return prisma.$transaction(async (tx) => {
     const updated = await tx.news.update({ where: { id }, data, select: { id: true, slug: true, status: true, publishedAt: true, scheduledAt: true } });
     await audit(tx, { actorId: actor.id, action: `news.${action}`, entityType: "News", entityId: id, meta: { from: news.status, to }, ip });
+    await notifyReview(tx, { userId: news.authorId, actorId: actor.id, kind: "news", action, reason: opts.reason, link: `/news/${updated.slug}` });
     return updated;
   });
 }
@@ -306,6 +311,7 @@ const manageSelect = {
   status: true,
   isBreaking: true,
   isFeatured: true,
+  isSponsored: true,
   updatedAt: true,
   publishedAt: true,
   scheduledAt: true,

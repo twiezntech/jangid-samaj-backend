@@ -4,6 +4,7 @@ import { prisma } from "../../config/prisma";
 import { ApiError } from "../../utils/apiError";
 import { Actor, can, inScope, scopeWhere } from "../../lib/access";
 import { audit } from "../../lib/audit";
+import { notifyReview } from "../../lib/notify";
 import { byLang, translationRows } from "../../lib/i18n";
 import { toPage } from "../../lib/pagination";
 import { cleanText } from "../../lib/sanitize";
@@ -242,6 +243,7 @@ export async function transitionBusiness(actor: Actor, id: string, action: Busin
   return prisma.$transaction(async (tx) => {
     const updated = await tx.business.update({ where: { id }, data, select: { id: true, slug: true, status: true, verification: true } });
     await audit(tx, { actorId: actor.id, action: `business.${action}`, entityType: "Business", entityId: id, meta: { from: b.status, to, ...(reason ? { reason } : {}) }, ip });
+    await notifyReview(tx, { userId: b.ownerId, actorId: actor.id, kind: "business", action, reason, link: `/business/${updated.slug}` });
     return updated;
   });
 }

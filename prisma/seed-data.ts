@@ -753,4 +753,139 @@ const achievements: AchievementSeed[] = [
   },
 ];
 
-export const demo = { locations, categories, tags, news, directory, leaders, events, businessCategories, businesses, achievements };
+// Demo notices are clearly fictional and carry no photos (a real person's face must never be used on a death notice).
+interface ObituarySeed {
+  slug: string;
+  gender: "MALE" | "FEMALE";
+  location: string;
+  /** Days before the seed run. */
+  diedDaysAgo: number;
+  born?: string;
+  age?: number;
+  gotraKey?: string;
+  contact?: { name: string; relation: string; phone: string; isPublic: boolean };
+  /** [type, days from the seed run, hour, venue, address?] */
+  ceremonies: ["ANTIM_YATRA" | "UTHAVNA" | "SHOK_SABHA" | "PAGDI_RASM", number, number, string, string?][];
+  hi: { name: string; relationLine?: string; nativePlace?: string; biography?: string; familyMessage?: string };
+  en: { name: string; relationLine?: string; nativePlace?: string; biography?: string; familyMessage?: string };
+}
+
+const obituaries: ObituarySeed[] = [
+  {
+    slug: "shri-ramnarayan-jangid-jaipur", gender: "MALE", location: "rajasthan/jaipur/jaipur", diedDaysAgo: 2, born: "1948-03-12", gotraKey: "koolwal",
+    contact: { name: "सुरेश जांगिड़", relation: "पुत्र", phone: "9829000001", isPublic: true },
+    ceremonies: [["UTHAVNA", 2, 16, "जांगिड़ समाज भवन, मानसरोवर", "सेक्टर 5, मानसरोवर, जयपुर"], ["PAGDI_RASM", 10, 11, "निवास स्थान", "45, शांति नगर, जयपुर"]],
+    hi: { name: "रामनारायण जांगिड़", relationLine: "पुत्र स्व. श्री मोतीलाल जांगिड़", nativePlace: "ग्राम बगरू, जयपुर", biography: "सेवानिवृत्त शिक्षक। चालीस वर्षों तक गाँव के विद्यालय में पढ़ाया और समाज के कई बच्चों को निःशुल्क शिक्षा दी।", familyMessage: "शोकाकुल: धर्मपत्नी श्रीमती कमला देवी, पुत्र सुरेश व महेश, पौत्र-पौत्रियाँ एवं समस्त जांगिड़ परिवार।" },
+    en: { name: "Ramnarayan Jangid", relationLine: "S/o Late Shri Motilal Jangid", nativePlace: "Bagru village, Jaipur", biography: "A retired teacher who taught at the village school for forty years and educated many children of the community free of cost.", familyMessage: "Mourned by his wife Smt. Kamla Devi, sons Suresh and Mahesh, grandchildren and the entire Jangid family." },
+  },
+  {
+    slug: "smt-sharda-devi-jangid-jodhpur", gender: "FEMALE", location: "rajasthan/jodhpur/jodhpur", diedDaysAgo: 6, age: 81,
+    ceremonies: [["SHOK_SABHA", 1, 15, "विश्वकर्मा मंदिर प्रांगण", "पावटा, जोधपुर"]],
+    hi: { name: "शारदा देवी जांगिड़", relationLine: "धर्मपत्नी स्व. श्री भंवरलाल जांगिड़", nativePlace: "पीपाड़ शहर", familyMessage: "शोकाकुल: पुत्र राजेश, पुत्रवधू सुनीता एवं समस्त परिवारजन।" },
+    en: { name: "Sharda Devi Jangid", relationLine: "W/o Late Shri Bhanwarlal Jangid", nativePlace: "Pipar City", familyMessage: "Mourned by her son Rajesh, daughter-in-law Sunita and the whole family." },
+  },
+  {
+    slug: "shri-omprakash-jangid-rohtak", gender: "MALE", location: "haryana/rohtak/rohtak", diedDaysAgo: 25, born: "1956-08-01", gotraKey: "ajmera",
+    ceremonies: [["UTHAVNA", -21, 14, "सामुदायिक भवन", "मॉडल टाउन, रोहतक"]],
+    hi: { name: "ओमप्रकाश जांगिड़", relationLine: "पुत्र स्व. श्री हरिराम जांगिड़", biography: "लकड़ी के कारीगर और रोहतक जांगिड़ सभा के पूर्व कोषाध्यक्ष।" },
+    en: { name: "Omprakash Jangid", relationLine: "S/o Late Shri Hariram Jangid", biography: "A woodcraft artisan and former treasurer of the Rohtak Jangid Sabha." },
+  },
+];
+
+interface JobSeed {
+  slug: string;
+  type: "FULL_TIME" | "PART_TIME" | "CONTRACT" | "INTERNSHIP" | "FREELANCE" | "BUSINESS_OPPORTUNITY";
+  workMode?: "ONSITE" | "REMOTE" | "HYBRID";
+  organisation: string;
+  business?: string;
+  location: string;
+  salary?: [number, number];
+  experience?: number;
+  vacancies?: number;
+  /** Days from the seed run. */
+  closesIn?: number;
+  featured?: boolean;
+  phone?: string;
+  hi: { title: string; description: string; requirements?: string };
+  en: { title: string; description: string; requirements?: string };
+}
+
+const jobs: JobSeed[] = [
+  {
+    slug: "furniture-karigar-jaipur", type: "FULL_TIME", organisation: "श्री विश्वकर्मा फर्नीचर", business: "shree-vishwakarma-furniture-jaipur", location: "rajasthan/jaipur/jaipur",
+    salary: [18000, 28000], experience: 2, vacancies: 4, closesIn: 20, featured: true, phone: "9000000101",
+    hi: { title: "अनुभवी फर्नीचर कारीगर की आवश्यकता", description: "हमारी जयपुर वर्कशॉप के लिए सागवान और शीशम के फर्नीचर बनाने वाले कारीगर चाहिए। रहने की व्यवस्था और समय पर वेतन।", requirements: "कम से कम 2 वर्ष का अनुभव, नक्काशी का ज्ञान हो तो प्राथमिकता।" },
+    en: { title: "Experienced furniture craftsmen wanted", description: "We need craftsmen for teak and sheesham furniture at our Jaipur workshop. Accommodation provided and salary on time.", requirements: "At least 2 years of experience; carving skills preferred." },
+  },
+  {
+    slug: "interior-designer-intern-indore", type: "INTERNSHIP", workMode: "HYBRID", organisation: "Jangid Interiors Studio", location: "madhya-pradesh/indore/indore",
+    salary: [8000, 12000], vacancies: 2, closesIn: 30,
+    hi: { title: "इंटीरियर डिज़ाइन इंटर्नशिप (6 माह)", description: "इंटीरियर डिज़ाइन के विद्यार्थियों के लिए साइट विज़िट, 3D मॉडलिंग और क्लाइंट मीटिंग का व्यावहारिक अनुभव।" },
+    en: { title: "Interior design internship (6 months)", description: "Hands-on site visits, 3D modelling and client meetings for interior design students." },
+  },
+  {
+    slug: "accountant-part-time-jodhpur", type: "PART_TIME", organisation: "जांगिड़ समाज सेवा समिति, जोधपुर", location: "rajasthan/jodhpur/jodhpur",
+    salary: [10000, 12000], experience: 1, vacancies: 1, closesIn: 15,
+    hi: { title: "पार्ट-टाइम लेखाकार", description: "समिति के खातों, रसीदों और वार्षिक रिपोर्ट के लिए शाम के समय 3 घंटे काम।", requirements: "टैली का ज्ञान आवश्यक।" },
+    en: { title: "Part-time accountant", description: "Three hours every evening to manage the committee's accounts, receipts and annual report.", requirements: "Tally knowledge required." },
+  },
+  {
+    slug: "modular-kitchen-dealership-gujarat", type: "BUSINESS_OPPORTUNITY", organisation: "WoodCraft Modular", location: "gujarat/ahmedabad/ahmedabad", closesIn: 45,
+    hi: { title: "मॉड्यूलर किचन डीलरशिप — गुजरात के शहरों में", description: "समाज के युवा उद्यमियों के लिए कम निवेश में मॉड्यूलर किचन डीलरशिप। प्रशिक्षण और मार्केटिंग सहायता कंपनी देगी।" },
+    en: { title: "Modular kitchen dealership — Gujarat cities", description: "A low-investment modular kitchen dealership for young samaj entrepreneurs, with training and marketing support from the company." },
+  },
+];
+
+interface AlbumSeed {
+  slug: string;
+  location: string;
+  event?: string;
+  takenDaysAgo: number;
+  featured?: boolean;
+  photos: string[];
+  hi: { title: string; description?: string };
+  en: { title: string; description?: string };
+}
+
+const albums: AlbumSeed[] = [
+  {
+    slug: "vishwakarma-jayanti-2025-jaipur", location: "rajasthan/jaipur/jaipur", event: "vishwakarma-jayanti-mahotsav", takenDaysAgo: 40, featured: true,
+    photos: [U("1548013146-72479768bada"), U("1524492412937-b28074a5d7da"), U("1514222134-b57cbb8ce073"), U("1477587458883-47145ed94245")],
+    hi: { title: "विश्वकर्मा जयंती महोत्सव — झलकियां", description: "शोभायात्रा, पूजन और सम्मान समारोह की तस्वीरें।" },
+    en: { title: "Vishwakarma Jayanti festival — highlights", description: "Photos from the procession, puja and felicitation ceremony." },
+  },
+  {
+    slug: "pratibha-samman-samaroh-jodhpur", location: "rajasthan/jodhpur/jodhpur", takenDaysAgo: 75,
+    photos: [U("1523050854058-8df90110c9f1"), U("1531482615713-2afd69097998"), U("1521737604893-d14cc237f11d")],
+    hi: { title: "प्रतिभा सम्मान समारोह, जोधपुर", description: "10वीं और 12वीं के मेधावी विद्यार्थियों का सम्मान।" },
+    en: { title: "Talent felicitation, Jodhpur", description: "Honouring the top students of classes 10 and 12." },
+  },
+];
+
+interface MatrimonySeed {
+  email: string;
+  code: string;
+  gender: "MALE" | "FEMALE";
+  dob: string;
+  height: number;
+  location: string;
+  gotraKey?: string;
+  education: "GRADUATE" | "POST_GRADUATE" | "PROFESSIONAL" | "DIPLOMA";
+  educationText: string;
+  profession: string;
+  income: "L3_TO_6L" | "L6_TO_10L" | "L10_TO_20L";
+  name: string;
+  father: string;
+  about: string;
+  verified?: boolean;
+}
+
+// Fictional profiles, no photos, phone numbers in the unused 90000 series.
+const matrimony: MatrimonySeed[] = [
+  { email: "demo.rahul@jangidsamaj.local", code: "JS10001", gender: "MALE", dob: "1996-04-12", height: 175, location: "rajasthan/jaipur/jaipur", gotraKey: "koolwal", education: "PROFESSIONAL", educationText: "B.Tech (Civil)", profession: "Site engineer", income: "L6_TO_10L", name: "Rahul Jangid", father: "Shri Mahesh Jangid", about: "Simple, family-oriented, enjoys woodwork and cricket.", verified: true },
+  { email: "demo.amit@jangidsamaj.local", code: "JS10002", gender: "MALE", dob: "1994-11-02", height: 170, location: "haryana/rohtak/rohtak", gotraKey: "ajmera", education: "GRADUATE", educationText: "B.Com", profession: "Furniture business", income: "L10_TO_20L", name: "Amit Jangid", father: "Shri Ramesh Jangid", about: "Runs the family furniture business in Rohtak." },
+  { email: "demo.priya@jangidsamaj.local", code: "JS10003", gender: "FEMALE", dob: "1998-07-21", height: 160, location: "rajasthan/jodhpur/jodhpur", gotraKey: "dhariwal", education: "POST_GRADUATE", educationText: "M.Sc (Chemistry)", profession: "School teacher", income: "L3_TO_6L", name: "Priya Jangid", father: "Shri Suresh Jangid", about: "Teacher, loves classical music and cooking.", verified: true },
+  { email: "demo.neha@jangidsamaj.local", code: "JS10004", gender: "FEMALE", dob: "1997-01-30", height: 158, location: "delhi/new-delhi/new-delhi", education: "PROFESSIONAL", educationText: "CA", profession: "Chartered accountant", income: "L10_TO_20L", name: "Neha Jangid", father: "Shri Dinesh Jangid", about: "Working in Delhi; values family and honesty." },
+];
+
+export const demo = { locations, categories, tags, news, directory, leaders, events, businessCategories, businesses, achievements, obituaries, jobs, albums, matrimony };

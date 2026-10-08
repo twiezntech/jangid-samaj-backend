@@ -23,6 +23,15 @@ import { eventsRouter } from "./modules/events/events.routes";
 import { businessRouter } from "./modules/business/business.routes";
 import { achievementsRouter } from "./modules/achievements/achievements.routes";
 import { gotraRouter } from "./modules/gotra/gotra.routes";
+import { obituariesRouter } from "./modules/obituaries/obituaries.routes";
+import { accountRouter } from "./modules/account/account.routes";
+import { jobsRouter } from "./modules/jobs/jobs.routes";
+import { galleryRouter } from "./modules/gallery/gallery.routes";
+import { matrimonyRouter } from "./modules/matrimony/matrimony.routes";
+import { reportsRouter } from "./modules/reports/reports.routes";
+import { adsRouter } from "./modules/ads/ads.routes";
+import { analyticsRouter } from "./modules/analytics/analytics.routes";
+import { announcementsRouter } from "./modules/announcements/announcements.routes";
 import { serveUploads, uploadRouter } from "./modules/uploads/upload.routes";
 
 export const app = express();
@@ -49,7 +58,7 @@ app.use(cors({ origin: env.corsOrigins, credentials: true, maxAge: 600 }));
 // Article bodies are large; everything else stays tiny to shrink the abuse surface.
 const smallJson = express.json({ limit: "16kb" });
 const contentJson = express.json({ limit: "600kb" });
-app.use((req: Request, res: Response, next: NextFunction) => (/^\/api\/v1\/(news|directory|leaders|events|business|achievements)/.test(req.path) ? contentJson : smallJson)(req, res, next));
+app.use((req: Request, res: Response, next: NextFunction) => (/^\/api\/v1\/(news|directory|leaders|events|business|achievements|obituaries|jobs|gallery|matrimony)/.test(req.path) ? contentJson : smallJson)(req, res, next));
 app.use(cookieParser());
 
 // Uploaded images (random, immutable names). Registered before the 404 handler.
@@ -80,6 +89,15 @@ v1.use("/events", eventsRouter);
 v1.use("/business", businessRouter);
 v1.use("/achievements", achievementsRouter);
 v1.use("/gotra", gotraRouter);
+v1.use("/obituaries", obituariesRouter);
+v1.use("/account", accountRouter);
+v1.use("/jobs", jobsRouter);
+v1.use("/gallery", galleryRouter);
+v1.use("/matrimony", matrimonyRouter);
+v1.use("/reports", reportsRouter);
+v1.use("/ads", adsRouter);
+v1.use("/analytics", analyticsRouter);
+v1.use("/announcements", announcementsRouter);
 v1.use("/uploads", uploadRouter);
 v1.use("/admin", adminRouter);
 v1.use("/sitemap", sitemapRouter);

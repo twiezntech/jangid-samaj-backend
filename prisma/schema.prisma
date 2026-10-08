@@ -98,6 +98,28 @@ enum AchievementCategory {
   OTHER
 }
 
+/// Used only to pick the honorific on a notice ("स्व. श्री" / "स्व. श्रीमती").
+enum Gender {
+  MALE
+  FEMALE
+}
+
+/// Rites listed on a demise notice, in the order families usually announce them.
+enum CeremonyType {
+  ANTIM_YATRA
+  UTHAVNA
+  SHOK_SABHA
+  PAGDI_RASM
+  OTHER
+}
+
+/// Condolence messages are moderated before anyone else sees them.
+enum TributeStatus {
+  PENDING
+  PUBLISHED
+  HIDDEN
+}
+
 // ===========================================================================
 // Auth / RBAC
 // ===========================================================================
@@ -156,6 +178,16 @@ model User {
   otpCodes             OtpCode[]
   refreshTokens        RefreshToken[]
   emailTokens          EmailVerificationToken[]
+  passwordResets       PasswordResetToken[]
+  savedItems           SavedItem[]
+  jobsPosted           Job[]                    @relation("JobCreator")
+  jobApplications      JobApplication[]
+  albumsMade           Album[]                  @relation("AlbumCreator")
+  notifications        Notification[]
+  announcementsSent    Announcement[]           @relation("AnnouncementSender")
+  reportsFiled         ContentReport[]          @relation("ReportReporter")
+  matrimonyProfile     MatrimonyProfile?
+  adsCreated           Ad[]                     @relation("AdCreator")
   newsArticles         News[]                   @relation("NewsAuthor")
   directorySubmissions DirectoryEntry[]         @relation("DirectorySubmitter")
   leaderProfilesMade   LeaderProfile[]          @relation("LeaderCreator")
@@ -165,6 +197,8 @@ model User {
   businesses           Business[]               @relation("BusinessOwner")
   businessEnquiries    BusinessEnquiry[]
   achievementsMade     Achievement[]            @relation("AchievementCreator")
+  obituariesMade       Obituary[]               @relation("ObituaryCreator")
+  tributes             ObituaryTribute[]
   uploads              Media[]
 
   createdAt DateTime @default(now())
@@ -214,6 +248,44 @@ model EmailVerificationToken {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+/// One-time password reset link (1 hour). Only the hash is stored.
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// What a member can bookmark from the website.
+enum SavedType {
+  NEWS
+  BUSINESS
+  EVENT
+  DIRECTORY
+  LEADER
+  ACHIEVEMENT
+  OBITUARY
+}
+
+/// A bookmark. Title and image are captured when saving so the "Saved" list needs no joins across modules.
+model SavedItem {
+  id        String    @id @default(cuid())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  type      SavedType
+  slug      String
+  title     String
+  imageUrl  String?
+  createdAt DateTime  @default(now())
+
+  @@unique([userId, type, slug])
+  @@index([userId, createdAt(sort: Desc)])
 }
 
 model Feedback {
@@ -284,13 +356,19 @@ model Location {
   isActive  Boolean       @default(true)
   sortOrder Int           @default(0)
 
-  users        User[]
-  news         News[]
-  directory    DirectoryEntry[]
-  leaders      LeaderProfile[]
-  events       Event[]
-  businesses   Business[]
-  achievements Achievement[]
+  users             User[]
+  news              News[]
+  directory         DirectoryEntry[]
+  leaders           LeaderProfile[]
+  events            Event[]
+  businesses        Business[]
+  achievements      Achievement[]
+  obituaries        Obituary[]
+  jobs              Job[]
+  albums            Album[]
+  announcements     Announcement[]
+  matrimonyProfiles MatrimonyProfile[]
+  ads               Ad[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -359,6 +437,8 @@ model News {
   publishedAt DateTime?
   scheduledAt DateTime?
   viewCount   Int       @default(0)
+  /// Paid / promotional story; always labelled "Sponsored" on the website.
+  isSponsored Boolean   @default(false)
 
   translations NewsTranslation[]
   tags         NewsTag[]
@@ -597,6 +677,7 @@ model Event {
 
   translations  EventTranslation[]
   registrations EventRegistration[]
+  albums        Album[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -708,6 +789,7 @@ model Business {
 
   translations BusinessTranslation[]
   enquiries    BusinessEnquiry[]
+  jobs         Job[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -832,19 +914,643 @@ model Rishi {
 }
 
 model Gotra {
-  id        String   @id @default(cuid())
-  nameEn    String
-  nameHi    String?
+  id                      String             @id @default(cuid())
+  nameEn                  String
+  nameHi                  String?
   /// Lower-cased letters/digits of nameEn. Unique, so "Aslia", "ASLIA" and "A-slia" can never be added twice.
-  nameKey   String   @unique
+  nameKey                 String             @unique
   /// Restrict: a rishi that still has gotras cannot be deleted.
-  rishiId   String?
-  rishi     Rishi?   @relation(fields: [rishiId], references: [id], onDelete: Restrict)
+  rishiId                 String?
+  rishi                   Rishi?             @relation(fields: [rishiId], references: [id], onDelete: Restrict)
   /// Hidden gotras stay in the table (profiles may reference them) but disappear from pickers and the website.
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isActive                Boolean            @default(true)
+  obituaries              Obituary[]
+  matrimonyProfiles       MatrimonyProfile[] @relation("ProfileGotra")
+  matrimonyMotherProfiles MatrimonyProfile[] @relation("ProfileMotherGotra")
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
 
   @@index([isActive, nameEn])
   @@index([rishiId, isActive])
+}
+
+// ===========================================================================
+// Phase 2 - Obituaries / Tributes (शोक संदेश व श्रद्धांजलि)
+// ===========================================================================
+
+/// A demise notice submitted by the family (or staff) and published after review.
+model Obituary {
+  id     String        @id @default(cuid())
+  slug   String        @unique
+  status ContentStatus @default(PENDING_REVIEW)
+
+  gender      Gender?
+  photoUrl    String?
+  dateOfBirth DateTime? @db.Date
+  dateOfDeath DateTime  @db.Date
+  /// Used when the exact date of birth is not known.
+  ageYears    Int?
+
+  gotraId String?
+  gotra   Gotra?  @relation(fields: [gotraId], references: [id], onDelete: SetNull)
+
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id])
+  stateId    String?
+  districtId String?
+  cityId     String?
+
+  /// Family contact. The phone stays private unless the family opts in.
+  contactName     String?
+  contactRelation String?
+  contactPhone    String?
+  isContactPublic Boolean @default(false)
+
+  createdById String?
+  createdBy   User?   @relation("ObituaryCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  reviewedById    String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+
+  translations ObituaryTranslation[]
+  ceremonies   ObituaryCeremony[]
+  tributes     ObituaryTribute[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, dateOfDeath(sort: Desc)])
+  @@index([stateId, status])
+  @@index([districtId, status])
+  @@index([cityId, status])
+  @@index([createdById])
+}
+
+model ObituaryTranslation {
+  id            String   @id @default(cuid())
+  obituary      Obituary @relation(fields: [obituaryId], references: [id], onDelete: Cascade)
+  obituaryId    String
+  lang          Lang
+  /// Full name of the deceased, without the "स्व." prefix (added on display).
+  name          String
+  /// "S/o Late Shri ...", "W/o Shri ..." etc.
+  relationLine  String?
+  nativePlace   String?
+  biography     String?
+  /// Words from the family and the list of mourners (शोकाकुल परिवार).
+  familyMessage String?
+
+  @@unique([obituaryId, lang])
+}
+
+/// Antim yatra, uthavna, shok sabha... Written once in the language the family used.
+model ObituaryCeremony {
+  id         String       @id @default(cuid())
+  obituary   Obituary     @relation(fields: [obituaryId], references: [id], onDelete: Cascade)
+  obituaryId String
+  type       CeremonyType
+  startsAt   DateTime
+  venue      String
+  address    String?
+  note       String?
+  sortOrder  Int          @default(0)
+
+  @@index([obituaryId, startsAt])
+  @@index([startsAt])
+}
+
+/// A member's condolence message. One per member per notice; posting again replaces it and sends it back to review.
+model ObituaryTribute {
+  id         String        @id @default(cuid())
+  obituary   Obituary      @relation(fields: [obituaryId], references: [id], onDelete: Cascade)
+  obituaryId String
+  userId     String?
+  user       User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  /// Display name captured when posting, so the tribute survives later account changes.
+  authorName String
+  relation   String?
+  message    String
+  status     TributeStatus @default(PENDING)
+
+  reviewedById String?
+  reviewedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([obituaryId, userId])
+  @@index([obituaryId, status, createdAt])
+  @@index([status, createdAt])
+}
+
+// ===========================================================================
+// Phase 2 - Jobs & Opportunities
+// ===========================================================================
+
+enum JobType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+  FREELANCE
+  BUSINESS_OPPORTUNITY
+}
+
+enum WorkMode {
+  ONSITE
+  REMOTE
+  HYBRID
+}
+
+/// A vacancy, hiring post or business opportunity posted by a member or staff and published after review.
+model Job {
+  id       String        @id @default(cuid())
+  slug     String        @unique
+  status   ContentStatus @default(PENDING_REVIEW)
+  type     JobType
+  workMode WorkMode      @default(ONSITE)
+
+  /// Hiring business / employer name (not translated).
+  organisationName String
+  businessId       String?
+  business         Business? @relation(fields: [businessId], references: [id], onDelete: SetNull)
+
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id])
+  stateId    String?
+  districtId String?
+  cityId     String?
+
+  /// Monthly salary range in INR (optional).
+  salaryMin       Int?
+  salaryMax       Int?
+  experienceYears Int?
+  vacancies       Int?
+  /// Applications close at the end of this day (IST). Expired jobs leave the public list.
+  lastDate        DateTime? @db.Date
+
+  /// How to apply outside the site. The in-site application form is always available too.
+  applyUrl   String?
+  applyEmail String?
+  applyPhone String?
+
+  isFeatured Boolean @default(false)
+
+  createdById String?
+  createdBy   User?   @relation("JobCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  reviewedById    String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+
+  translations JobTranslation[]
+  applications JobApplication[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, isFeatured, createdAt(sort: Desc)])
+  @@index([type, status])
+  @@index([stateId, status])
+  @@index([districtId, status])
+  @@index([cityId, status])
+  @@index([createdById])
+}
+
+model JobTranslation {
+  id           String  @id @default(cuid())
+  job          Job     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  jobId        String
+  lang         Lang
+  title        String
+  description  String
+  requirements String?
+
+  @@unique([jobId, lang])
+}
+
+/// An application sent through the website. The poster and job managers can read it.
+model JobApplication {
+  id        String      @id @default(cuid())
+  job       Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  jobId     String
+  userId    String?
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name      String
+  phone     String
+  email     String?
+  message   String
+  status    InboxStatus @default(NEW)
+  createdAt DateTime    @default(now())
+
+  @@unique([jobId, userId])
+  @@index([jobId, createdAt(sort: Desc)])
+}
+
+// ===========================================================================
+// Phase 2 - Photo & Video Gallery
+// ===========================================================================
+
+enum GalleryItemKind {
+  PHOTO
+  VIDEO
+}
+
+model Album {
+  id     String        @id @default(cuid())
+  slug   String        @unique
+  status ContentStatus @default(PENDING_REVIEW)
+
+  coverUrl String?
+  takenOn  DateTime? @db.Date
+
+  eventId String?
+  event   Event?  @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id])
+  stateId    String?
+  districtId String?
+  cityId     String?
+
+  isFeatured Boolean @default(false)
+
+  createdById String?
+  createdBy   User?   @relation("AlbumCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  reviewedById    String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+
+  translations AlbumTranslation[]
+  items        GalleryItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, isFeatured, takenOn(sort: Desc)])
+  @@index([eventId])
+  @@index([stateId, status])
+  @@index([districtId, status])
+  @@index([cityId, status])
+  @@index([createdById])
+}
+
+model AlbumTranslation {
+  id          String  @id @default(cuid())
+  album       Album   @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  albumId     String
+  lang        Lang
+  title       String
+  description String?
+
+  @@unique([albumId, lang])
+}
+
+/// A photo (our upload) or a YouTube video inside an album.
+model GalleryItem {
+  id        String          @id @default(cuid())
+  album     Album           @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  albumId   String
+  kind      GalleryItemKind
+  url       String
+  caption   String?
+  sortOrder Int             @default(0)
+
+  @@index([albumId, sortOrder])
+}
+
+// ===========================================================================
+// Notifications & announcements
+// ===========================================================================
+
+enum NotificationType {
+  APPROVED
+  REJECTED
+  TRIBUTE
+  JOB_APPLICATION
+  INTEREST
+  INTEREST_ACCEPTED
+  ANNOUNCEMENT
+  SYSTEM
+}
+
+/// In-site inbox (the bell). Push / SMS / WhatsApp channels can fan out from the same rows later.
+model Notification {
+  id        String           @id @default(cuid())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  type      NotificationType
+  titleHi   String
+  titleEn   String
+  bodyHi    String?
+  bodyEn    String?
+  /// Site-relative link ("/news/slug").
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, readAt])
+}
+
+/// A broadcast written in the admin panel, delivered to every member (or the members of one area).
+model Announcement {
+  id         String    @id @default(cuid())
+  titleHi    String
+  titleEn    String
+  bodyHi     String?
+  bodyEn     String?
+  link       String?
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id])
+  recipients Int       @default(0)
+  sentById   String?
+  sentBy     User?     @relation("AnnouncementSender", fields: [sentById], references: [id], onDelete: SetNull)
+  createdAt  DateTime  @default(now())
+
+  @@index([createdAt(sort: Desc)])
+}
+
+// ===========================================================================
+// Reporting content and profiles
+// ===========================================================================
+
+enum ReportTarget {
+  NEWS
+  BUSINESS
+  EVENT
+  DIRECTORY
+  LEADER
+  ACHIEVEMENT
+  OBITUARY
+  TRIBUTE
+  JOB
+  ALBUM
+  MATRIMONY
+}
+
+enum ReportReason {
+  SPAM
+  FAKE
+  OFFENSIVE
+  WRONG_INFO
+  PRIVACY
+  OTHER
+}
+
+model ContentReport {
+  id           String       @id @default(cuid())
+  targetType   ReportTarget
+  /// Slug for public pages, id for tributes and matrimony profiles.
+  targetId     String
+  reason       ReportReason
+  details      String?
+  reporterId   String?
+  reporter     User?        @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: SetNull)
+  status       InboxStatus  @default(NEW)
+  adminNote    String?
+  resolvedById String?
+  resolvedAt   DateTime?
+  createdAt    DateTime     @default(now())
+
+  @@unique([reporterId, targetType, targetId])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([targetType, targetId])
+}
+
+// ===========================================================================
+// Phase 3 - Matrimony (rishte)
+// ===========================================================================
+
+enum MaritalStatus {
+  NEVER_MARRIED
+  DIVORCED
+  WIDOWED
+  AWAITING_DIVORCE
+}
+
+enum ProfileFor {
+  SELF
+  SON
+  DAUGHTER
+  BROTHER
+  SISTER
+  RELATIVE
+}
+
+enum Manglik {
+  NO
+  YES
+  ANSHIK
+  DONT_KNOW
+}
+
+enum EducationLevel {
+  SCHOOL
+  DIPLOMA
+  GRADUATE
+  POST_GRADUATE
+  DOCTORATE
+  PROFESSIONAL
+}
+
+enum IncomeRange {
+  UNDER_3L
+  L3_TO_6L
+  L6_TO_10L
+  L10_TO_20L
+  ABOVE_20L
+  NOT_SPECIFIED
+}
+
+enum PhotoVisibility {
+  MEMBERS
+  ON_ACCEPT
+}
+
+enum InterestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  WITHDRAWN
+}
+
+/// One matrimonial profile per account (a parent may create it for a son or daughter).
+/// Contact details are revealed only after an interest is accepted by either side.
+model MatrimonyProfile {
+  id           String             @id @default(cuid())
+  /// Short public reference shown on cards ("JS10234").
+  code         String             @unique
+  userId       String             @unique
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status       ContentStatus      @default(PENDING_REVIEW)
+  verification VerificationStatus @default(UNVERIFIED)
+  profileFor   ProfileFor         @default(SELF)
+
+  name          String
+  gender        Gender
+  dateOfBirth   DateTime      @db.Date
+  heightCm      Int?
+  maritalStatus MaritalStatus @default(NEVER_MARRIED)
+  manglik       Manglik       @default(DONT_KNOW)
+
+  gotraId       String?
+  gotra         Gotra?  @relation("ProfileGotra", fields: [gotraId], references: [id], onDelete: SetNull)
+  /// The mother's gotra; families use it to rule out matches.
+  motherGotraId String?
+  motherGotra   Gotra?  @relation("ProfileMotherGotra", fields: [motherGotraId], references: [id], onDelete: SetNull)
+
+  educationLevel EducationLevel?
+  education      String?
+  profession     String?
+  income         IncomeRange     @default(NOT_SPECIFIED)
+
+  locationId  String?
+  location    Location? @relation(fields: [locationId], references: [id])
+  stateId     String?
+  districtId  String?
+  cityId      String?
+  nativePlace String?
+
+  fatherName       String?
+  fatherOccupation String?
+  motherName       String?
+  siblings         String?
+  about            String?
+
+  /// Partner preference (age range + free text).
+  prefAgeMin Int?
+  prefAgeMax Int?
+  prefNotes  String?
+
+  photos          String[]
+  photoVisibility PhotoVisibility @default(MEMBERS)
+
+  contactPhone    String
+  contactWhatsapp String?
+
+  /// The owner can hide the profile without deleting it.
+  isHidden Boolean @default(false)
+
+  reviewedById    String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+  lastActiveAt    DateTime  @default(now())
+
+  sentInterests     MatrimonyInterest[]  @relation("InterestFrom")
+  receivedInterests MatrimonyInterest[]  @relation("InterestTo")
+  shortlists        MatrimonyShortlist[] @relation("ShortlistOwner")
+  shortlistedBy     MatrimonyShortlist[] @relation("ShortlistTarget")
+  blocks            MatrimonyBlock[]     @relation("BlockOwner")
+  blockedBy         MatrimonyBlock[]     @relation("BlockTarget")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, isHidden, gender, dateOfBirth])
+  @@index([stateId, status])
+  @@index([districtId, status])
+  @@index([gotraId])
+}
+
+model MatrimonyInterest {
+  id          String           @id @default(cuid())
+  fromId      String
+  from        MatrimonyProfile @relation("InterestFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  toId        String
+  to          MatrimonyProfile @relation("InterestTo", fields: [toId], references: [id], onDelete: Cascade)
+  status      InterestStatus   @default(PENDING)
+  message     String?
+  respondedAt DateTime?
+  createdAt   DateTime         @default(now())
+
+  @@unique([fromId, toId])
+  @@index([toId, status])
+  @@index([fromId, status])
+}
+
+model MatrimonyShortlist {
+  ownerId   String
+  owner     MatrimonyProfile @relation("ShortlistOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  targetId  String
+  target    MatrimonyProfile @relation("ShortlistTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+
+  @@id([ownerId, targetId])
+}
+
+/// A blocked profile never appears in the blocker's search and cannot send them interests.
+model MatrimonyBlock {
+  ownerId   String
+  owner     MatrimonyProfile @relation("BlockOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  targetId  String
+  target    MatrimonyProfile @relation("BlockTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+
+  @@id([ownerId, targetId])
+}
+
+// ===========================================================================
+// Ads & monetization
+// ===========================================================================
+
+enum AdPlacement {
+  HOME_TOP
+  HOME_FEED
+  SIDEBAR
+  ARTICLE_INLINE
+  LIST_TOP
+}
+
+/// A banner campaign. Shown only between startsAt and endsAt, optionally only inside one area.
+model Ad {
+  id          String      @id @default(cuid())
+  name        String
+  advertiser  String
+  placement   AdPlacement
+  imageUrl    String
+  linkUrl     String
+  altText     String
+  startsAt    DateTime
+  endsAt      DateTime
+  isActive    Boolean     @default(true)
+  /// Higher weight = shown more often when several ads share a slot.
+  weight      Int         @default(1)
+  locationId  String?
+  location    Location?   @relation(fields: [locationId], references: [id])
+  stateId     String?
+  districtId  String?
+  cityId      String?
+  impressions Int         @default(0)
+  clicks      Int         @default(0)
+  createdById String?
+  createdBy   User?       @relation("AdCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([placement, isActive, startsAt, endsAt])
+}
+
+// ===========================================================================
+// Analytics (privacy friendly: daily counters, no personal data)
+// ===========================================================================
+
+model DailyPageView {
+  day     DateTime @db.Date
+  path    String
+  section String
+  views   Int      @default(0)
+
+  @@id([day, path])
+  @@index([day, section])
+}
+
+model DailySearch {
+  day   DateTime @db.Date
+  term  String
+  count Int      @default(0)
+
+  @@id([day, term])
 }

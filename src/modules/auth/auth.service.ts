@@ -6,7 +6,7 @@ import { prisma } from "../../config/prisma";
 import { env } from "../../config/env";
 import { ApiError } from "../../utils/apiError";
 import { hashToken, newOpaqueToken, signAccessToken } from "../../utils/jwt";
-import { alreadyRegisteredMail, sendMail, verificationMail } from "../../utils/mailer";
+import { alreadyRegisteredMail, passwordResetMail, sendMail, verificationMail } from "../../utils/mailer";
 import { loadActor } from "../../lib/access";
 
 const BCRYPT_COST = 12;
@@ -243,4 +243,41 @@ export async function getMe(userId: string) {
   assertUsable(user);
   const actor = await loadActor(userId);
   return { ...toPublicUser(user), permissions: [...(actor?.permissions ?? [])].sort() };
+}
+
+const RESET_TTL_MS = 60 * 60 * 1000;
+
+/** Always resolves the same way so it cannot be used to discover registered emails. */
+export async function requestPasswordReset(email: string) {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || !user.isActive || user.isSuspended || !user.email) return;
+  try {
+    const recent = await prisma.passwordResetToken.findFirst({ where: { userId: user.id, createdAt: { gt: new Date(Date.now() - RESEND_COOLDOWN_MS) } } });
+    if (recent) return;
+    await prisma.passwordResetToken.deleteMany({ where: { OR: [{ userId: user.id }, { expiresAt: { lt: new Date() } }] } });
+    const { token, hash } = newOpaqueToken();
+    await prisma.passwordResetToken.create({ data: { userId: user.id, tokenHash: hash, expiresAt: new Date(Date.now() + RESET_TTL_MS) } });
+    await sendMail({ to: user.email, ...passwordResetMail(user.name, `${env.appUrl}/reset-password?token=${token}`) });
+  } catch (err) {
+    console.error("[password-reset] failed:", err instanceof Error ? err.message : err);
+  }
+}
+
+/**
+ * Sets a new password from an emailed link. Opening the link proves the mailbox, so the email
+ * becomes verified; every existing session is signed out and the lockout is cleared.
+ */
+export async function resetPassword(token: string, password: string) {
+  const record = await prisma.passwordResetToken.findUnique({ where: { tokenHash: hashToken(token) } });
+  if (!record || record.expiresAt < new Date()) {
+    throw ApiError.badRequest("This reset link is invalid or has expired.", undefined, "INVALID_TOKEN");
+  }
+  const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: record.userId }, data: { passwordHash, isEmailVerified: true, failedLogins: 0, lockedUntil: null } });
+    await tx.passwordResetToken.deleteMany({ where: { userId: record.userId } });
+    await tx.refreshToken.updateMany({ where: { userId: record.userId, revokedAt: null }, data: { revokedAt: new Date() } });
+    await tx.auditLog.create({ data: { actorId: record.userId, action: "account.password.reset", entityType: "User", entityId: record.userId } });
+  });
+  return { ok: true };
 }

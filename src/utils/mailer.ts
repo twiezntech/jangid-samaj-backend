@@ -59,6 +59,25 @@ If you didn't sign up, ignore this email.`,
   };
 }
 
+export function passwordResetMail(name: string | null, link: string): Omit<Mail, "to"> {
+  const who = esc(name ?? "");
+  return {
+    subject: "पासवर्ड बदलें · Reset your password",
+    html: layout(`<p>नमस्ते ${who},</p><p>आपके खाते का पासवर्ड बदलने का अनुरोध मिला है। नीचे दिए बटन से नया पासवर्ड बनाएं। यह लिंक 1 घंटे तक मान्य है।</p>
+<p>Hi ${who}, we received a request to reset your password. This link is valid for 1 hour.</p>
+<p style="margin:24px 0"><a href="${link}" style="background:#ff9933;color:#1c1c1e;text-decoration:none;font-weight:bold;padding:12px 24px;border-radius:999px;display:inline-block">नया पासवर्ड बनाएं · Reset password</a></p>
+<p style="font-size:12px;color:#65676b">बटन न खुले तो यह लिंक खोलें / If the button doesn't work, open:<br>${link}</p>
+<p style="font-size:12px;color:#65676b">यदि यह अनुरोध आपने नहीं किया, तो इस ईमेल को अनदेखा करें — आपका पासवर्ड नहीं बदलेगा। · If you didn't ask for this, ignore this email.</p>`),
+    text: `पासवर्ड बदलने के लिए यह लिंक खोलें (1 घंटा मान्य):
+${link}
+
+Reset your password using this link (valid 1 hour):
+${link}
+
+If you didn't ask for this, ignore this email.`,
+  };
+}
+
 export function alreadyRegisteredMail(): Omit<Mail, "to"> {
   const link = `${env.appUrl}/login`;
   return {

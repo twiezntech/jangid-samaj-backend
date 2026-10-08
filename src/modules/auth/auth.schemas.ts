@@ -27,3 +27,10 @@ export const verifyEmailSchema = z.object({
 });
 
 export const resendSchema = z.object({ email });
+
+export const forgotSchema = z.object({ email });
+
+export const resetSchema = z.object({
+  token: z.string().regex(/^[a-f0-9]{96}$/, "Invalid token"),
+  password: registerSchema.shape.password,
+});

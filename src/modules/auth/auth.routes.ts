@@ -4,7 +4,7 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { requireAuth } from "../../middleware/auth";
 import { REFRESH_COOKIE, clearAuthCookies, setAuthCookies } from "../../utils/cookies";
 import { requireHuman } from "../../middleware/human";
-import { googleSchema, loginSchema, registerSchema, resendSchema, verifyEmailSchema } from "./auth.schemas";
+import { forgotSchema, googleSchema, loginSchema, registerSchema, resendSchema, resetSchema, verifyEmailSchema } from "./auth.schemas";
 import * as auth from "./auth.service";
 
 const tooMany = { error: { message: "Too many requests. Please try again later." } };
@@ -62,6 +62,34 @@ authRouter.post(
   asyncHandler(async (req, res) => {
     await auth.resendVerification(resendSchema.parse(req.body).email);
     res.json({ ok: true });
+  })
+);
+
+authRouter.post(
+  "/forgot-password",
+  limiter(10, 60),
+  rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 3,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: tooMany,
+    skip: () => process.env.NODE_ENV === "test",
+    keyGenerator: (req) => `forgot:${String(req.body?.email ?? "").toLowerCase()}`,
+  }),
+  requireHuman,
+  asyncHandler(async (req, res) => {
+    await auth.requestPasswordReset(forgotSchema.parse(req.body).email);
+    res.json({ ok: true });
+  })
+);
+
+authRouter.post(
+  "/reset-password",
+  limiter(20),
+  asyncHandler(async (req, res) => {
+    const { token, password } = resetSchema.parse(req.body);
+    res.json(await auth.resetPassword(token, password));
   })
 );
 

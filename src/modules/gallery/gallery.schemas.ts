@@ -2,15 +2,13 @@ import { z } from "zod";
 import { paginationQuery } from "../../lib/pagination";
 import { imageUrl, locationPath, slugParam, youtubeUrl } from "../../lib/validators";
 
+export const MAX_ITEMS = 200;
+
 const boolQuery = z.enum(["true", "false"]).transform((v) => v === "true");
 
 const translation = z.object({
-  title: z.string().trim().min(3).max(200),
-  excerpt: z.string().trim().max(400).optional(),
-  body: z.string().trim().min(1).max(60_000),
-  imageAlt: z.string().trim().max(200).optional(),
-  metaTitle: z.string().trim().max(70).optional(),
-  metaDescription: z.string().trim().max(170).optional(),
+  title: z.string().trim().min(3).max(160),
+  description: z.string().trim().max(2000).optional(),
 });
 
 const translations = z
@@ -18,46 +16,50 @@ const translations = z
   .strict()
   .refine((t) => !!t.hi || !!t.en, "Provide at least one language");
 
+const caption = z.string().trim().max(300).optional();
+
+/** Photos must be our uploads / allow-listed hosts; videos must be YouTube links. */
+const item = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("PHOTO"), url: imageUrl, caption }).strict(),
+  z.object({ kind: z.literal("VIDEO"), url: youtubeUrl, caption }).strict(),
+]);
+
 const fields = {
   slug: slugParam.optional(),
-  categorySlug: slugParam.nullable().optional(),
-  locationPath: locationPath.nullable().optional(),
-  coverImageUrl: imageUrl.nullable().optional(),
-  videoUrl: youtubeUrl.nullable().optional(),
-  sourceName: z.string().trim().max(120).nullable().optional(),
-  tags: z.array(slugParam).max(10).optional(),
-  isBreaking: z.boolean().optional(),
+  coverUrl: imageUrl.nullable().optional(),
+  takenOn: z.coerce.date().min(new Date("1950-01-01")).max(new Date(Date.now() + 24 * 3600_000)).nullable().optional(),
+  eventSlug: slugParam.nullable().optional(),
+  locationPath,
   isFeatured: z.boolean().optional(),
-  isSponsored: z.boolean().optional(),
+  items: z.array(item).max(MAX_ITEMS).optional(),
 };
 
-export const createNewsSchema = z.object({ ...fields, translations }).strict();
+export const createAlbumSchema = z.object({ ...fields, translations }).strict();
 
-export const updateNewsSchema = z
+export const updateAlbumSchema = z
   .object({ ...fields, translations: translations.optional() })
+  .partial()
   .strict()
   .refine((v) => Object.keys(v).length > 0, "Nothing to update");
 
-export const publicListQuery = paginationQuery.extend({
+export const albumListQuery = paginationQuery.extend({
   location: locationPath.optional(),
-  category: slugParam.optional(),
-  tag: slugParam.optional(),
+  event: slugParam.optional(),
   q: z.string().trim().min(2).max(100).optional(),
   featured: boolQuery.optional(),
-  breaking: boolQuery.optional(),
+  /** Only albums that contain at least one video. */
+  videos: boolQuery.optional(),
 });
 
-export const manageListQuery = paginationQuery.extend({
+export const albumManageQuery = paginationQuery.extend({
   status: z.enum(["DRAFT", "PENDING_REVIEW", "SCHEDULED", "PUBLISHED", "REJECTED", "ARCHIVED"]).optional(),
   q: z.string().trim().min(2).max(100).optional(),
   mine: boolQuery.optional(),
 });
 
-export const scheduleSchema = z.object({ scheduledAt: z.coerce.date() }).strict();
 export const rejectSchema = z.object({ reason: z.string().trim().min(5).max(500) }).strict();
-
 export const idParam = z.object({ id: z.string().trim().min(10).max(40) });
 export const slugRouteParam = z.object({ slug: slugParam });
 
-export type CreateNewsInput = z.infer<typeof createNewsSchema>;
-export type UpdateNewsInput = z.infer<typeof updateNewsSchema>;
+export type CreateAlbumInput = z.infer<typeof createAlbumSchema>;
+export type UpdateAlbumInput = z.infer<typeof updateAlbumSchema>;

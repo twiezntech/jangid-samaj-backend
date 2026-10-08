@@ -4,6 +4,7 @@ import { prisma } from "../../config/prisma";
 import { ApiError } from "../../utils/apiError";
 import { Actor, can, inScope } from "../../lib/access";
 import { audit } from "../../lib/audit";
+import { notifyReview } from "../../lib/notify";
 import { byLang } from "../../lib/i18n";
 import { toPage } from "../../lib/pagination";
 import { cleanText } from "../../lib/sanitize";
@@ -211,6 +212,7 @@ export async function transitionLeader(actor: Actor, id: string, action: LeaderA
   return prisma.$transaction(async (tx) => {
     const updated = await tx.leaderProfile.update({ where: { id }, data, select: { id: true, slug: true, status: true, verification: true } });
     await audit(tx, { actorId: actor.id, action: `leader.${action}`, entityType: "LeaderProfile", entityId: id, meta: { from: leader.status, to }, ip });
+    await notifyReview(tx, { userId: leader.createdById, actorId: actor.id, kind: "leader", action, reason, link: `/leaders/${updated.slug}` });
     return updated;
   });
 }

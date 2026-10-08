@@ -3,6 +3,7 @@ import { prisma } from "../../config/prisma";
 import { ApiError } from "../../utils/apiError";
 import { Actor, can, inScope } from "../../lib/access";
 import { audit } from "../../lib/audit";
+import { notifyReview } from "../../lib/notify";
 import { byLang, translationRows } from "../../lib/i18n";
 import { ModerationAction, authorizeTransition, initialStatus, manageScope, reviewFields } from "../../lib/moderation";
 import { toPage } from "../../lib/pagination";
@@ -166,6 +167,7 @@ export async function transitionAchievement(actor: Actor, id: string, action: Mo
   return prisma.$transaction(async (tx) => {
     const updated = await tx.achievement.update({ where: { id }, data, select: { id: true, slug: true, status: true, isFeatured: true } });
     await audit(tx, { actorId: actor.id, action: `achievement.${action}`, entityType: "Achievement", entityId: id, meta: { from: current.status, to }, ip });
+    await notifyReview(tx, { userId: current.createdById, actorId: actor.id, kind: "achievement", action, reason, link: `/achievements/${updated.slug}` });
     return updated;
   });
 }

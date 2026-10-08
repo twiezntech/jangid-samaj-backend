@@ -30,7 +30,21 @@ const PERMISSIONS: Record<string, string> = {
   "achievement.submit": "Submit community achievements for review",
   "achievement.manage": "Manage, approve and feature community achievements",
   "achievement.delete": "Permanently delete community achievements (super admin only)",
+  "obituary.submit": "Submit demise notices for review",
+  "obituary.manage": "Approve demise notices and moderate tributes",
+  "obituary.delete": "Permanently delete demise notices (super admin only)",
   "gotra.manage": "Manage gotra and rishi master data",
+  "job.submit": "Post jobs and opportunities for review",
+  "job.manage": "Approve and feature jobs; read applications",
+  "job.delete": "Permanently delete job posts (super admin only)",
+  "gallery.submit": "Submit photo / video albums for review",
+  "gallery.manage": "Approve and feature gallery albums",
+  "gallery.delete": "Permanently delete albums (super admin only)",
+  "matrimony.manage": "Approve, verify and moderate matrimony profiles",
+  "report.manage": "Review reported content and profiles",
+  "notification.send": "Send announcements to members",
+  "ad.manage": "Manage banner ads and campaigns",
+  "analytics.read": "View traffic and activity reports",
   "feedback.read": "Read and respond to feedback messages",
   "media.upload": "Upload images",
   "dashboard.view": "Open the admin panel",
@@ -47,29 +61,32 @@ const ROLES: { name: string; description: string; scoped: boolean; permissions: 
     scoped: false,
     permissions: [
       "news.create", "news.edit.any", "news.review", "directory.manage", "leader.manage", "taxonomy.manage",
-      "event.manage", "business.manage", "achievement.manage", "gotra.manage", "feedback.read", "media.upload", "dashboard.view",
+      "event.manage", "business.manage", "achievement.manage", "obituary.manage", "gotra.manage", "job.manage", "gallery.manage", "report.manage",
+      "notification.send", "analytics.read", "feedback.read", "media.upload", "dashboard.view",
     ],
   },
   {
     name: "DISTRICT_ADMIN",
     description: "Manages content inside their district",
     scoped: true,
-    permissions: ["news.create", "news.edit.any", "news.review", "directory.manage", "leader.manage", "event.manage", "business.manage", "achievement.manage", "media.upload", "dashboard.view"],
+    permissions: ["news.create", "news.edit.any", "news.review", "directory.manage", "leader.manage", "event.manage", "business.manage", "achievement.manage", "obituary.manage", "job.manage", "gallery.manage", "media.upload", "dashboard.view"],
   },
   {
     name: "CITY_REPORTER",
     description: "Reports from their city",
     scoped: true,
-    permissions: ["news.create", "directory.submit", "leader.submit", "business.submit", "achievement.submit", "media.upload", "dashboard.view"],
+    permissions: ["news.create", "directory.submit", "leader.submit", "business.submit", "achievement.submit", "obituary.submit", "job.submit", "gallery.submit", "media.upload", "dashboard.view"],
   },
   {
     name: "SALES_MANAGER",
     description: "Business listings, featured placements and enquiries",
     scoped: false,
-    permissions: ["business.manage", "media.upload", "dashboard.view"],
+    permissions: ["business.manage", "job.manage", "ad.manage", "analytics.read", "media.upload", "dashboard.view"],
   },
-  { name: "SUPPORT", description: "Answers member feedback and support requests", scoped: false, permissions: ["feedback.read", "dashboard.view"] },
-  { name: "MEMBER", description: "Registered community member", scoped: false, permissions: ["directory.submit", "leader.submit", "business.submit", "achievement.submit", "media.upload"] },
+  { name: "SUPPORT", description: "Answers member feedback and support requests", scoped: false, permissions: ["feedback.read", "report.manage", "dashboard.view"] },
+  { name: "MATRIMONY_MODERATOR", description: "Approves and verifies matrimony profiles, handles reports", scoped: false, permissions: ["matrimony.manage", "report.manage", "dashboard.view"] },
+  { name: "FINANCE", description: "Revenue: ads, featured listings and reports", scoped: false, permissions: ["ad.manage", "analytics.read", "dashboard.view"] },
+  { name: "MEMBER", description: "Registered community member", scoped: false, permissions: ["directory.submit", "leader.submit", "business.submit", "achievement.submit", "obituary.submit", "job.submit", "gallery.submit", "media.upload"] },
 ];
 
 async function seedRbac() {
@@ -254,6 +271,120 @@ async function seedAchievements(authorId: string) {
       await prisma.achievementTranslation.upsert({ where: { achievementId_lang: { achievementId: row.id, lang } }, create: { achievementId: row.id, lang, ...t }, update: t });
     }
   }
+
+  // Dates are relative to the seed run so the demo always has an upcoming uthavna / shok sabha.
+  const DAY = 24 * 60 * 60 * 1000;
+  const today = new Date(new Date().toISOString().slice(0, 10));
+  for (const o of demo.obituaries) {
+    const refs = await refsFor(o.location);
+    const gotra = o.gotraKey ? await prisma.gotra.findUnique({ where: { nameKey: o.gotraKey }, select: { id: true } }) : null;
+    const data = {
+      status: "PUBLISHED" as const,
+      gender: o.gender,
+      dateOfDeath: new Date(today.getTime() - o.diedDaysAgo * DAY),
+      dateOfBirth: o.born ? new Date(o.born) : null,
+      ageYears: o.age ?? null,
+      gotraId: gotra?.id ?? null,
+      contactName: o.contact?.name ?? null,
+      contactRelation: o.contact?.relation ?? null,
+      contactPhone: o.contact?.phone ?? null,
+      isContactPublic: o.contact?.isPublic ?? false,
+      createdById: authorId,
+      ...refs,
+    };
+    const row = await prisma.obituary.upsert({ where: { slug: o.slug }, create: { slug: o.slug, ...data }, update: data });
+    for (const lang of ["hi", "en"] as const) {
+      const t = { relationLine: null, nativePlace: null, biography: null, familyMessage: null, ...o[lang] };
+      await prisma.obituaryTranslation.upsert({ where: { obituaryId_lang: { obituaryId: row.id, lang } }, create: { obituaryId: row.id, lang, ...t }, update: t });
+    }
+    await prisma.obituaryCeremony.deleteMany({ where: { obituaryId: row.id } });
+    await prisma.obituaryCeremony.createMany({
+      data: o.ceremonies.map(([type, inDays, hour, venue, address], i) => ({
+        obituaryId: row.id,
+        type,
+        // Hour is IST; stored as UTC.
+        startsAt: new Date(today.getTime() + inDays * DAY + (hour * 60 - 330) * 60 * 1000),
+        venue,
+        address: address ?? null,
+        sortOrder: i,
+      })),
+    });
+  }
+}
+
+async function seedJobsGalleryMatrimony(authorId: string, password: string) {
+  const DAY = 24 * 60 * 60 * 1000;
+  const today = new Date(new Date().toISOString().slice(0, 10));
+
+  for (const j of demo.jobs) {
+    const refs = await refsFor(j.location);
+    const business = j.business ? await prisma.business.findUnique({ where: { slug: j.business }, select: { id: true } }) : null;
+    const data = {
+      status: "PUBLISHED" as const,
+      type: j.type,
+      workMode: j.workMode ?? "ONSITE",
+      organisationName: j.organisation,
+      businessId: business?.id ?? null,
+      salaryMin: j.salary?.[0] ?? null,
+      salaryMax: j.salary?.[1] ?? null,
+      experienceYears: j.experience ?? null,
+      vacancies: j.vacancies ?? null,
+      lastDate: j.closesIn ? new Date(today.getTime() + j.closesIn * DAY) : null,
+      applyPhone: j.phone ?? null,
+      isFeatured: !!j.featured,
+      createdById: authorId,
+      ...refs,
+    };
+    const row = await prisma.job.upsert({ where: { slug: j.slug }, create: { slug: j.slug, ...data }, update: data });
+    for (const lang of ["hi", "en"] as const) {
+      const t = { requirements: null, ...j[lang] };
+      await prisma.jobTranslation.upsert({ where: { jobId_lang: { jobId: row.id, lang } }, create: { jobId: row.id, lang, ...t }, update: t });
+    }
+  }
+
+  for (const a of demo.albums) {
+    const refs = await refsFor(a.location);
+    const event = a.event ? await prisma.event.findUnique({ where: { slug: a.event }, select: { id: true } }) : null;
+    const data = { status: "PUBLISHED" as const, takenOn: new Date(today.getTime() - a.takenDaysAgo * DAY), eventId: event?.id ?? null, isFeatured: !!a.featured, createdById: authorId, ...refs };
+    const row = await prisma.album.upsert({ where: { slug: a.slug }, create: { slug: a.slug, ...data }, update: data });
+    for (const lang of ["hi", "en"] as const) {
+      const t = { description: null, ...a[lang] };
+      await prisma.albumTranslation.upsert({ where: { albumId_lang: { albumId: row.id, lang } }, create: { albumId: row.id, lang, ...t }, update: t });
+    }
+    await prisma.galleryItem.deleteMany({ where: { albumId: row.id } });
+    await prisma.galleryItem.createMany({ data: a.photos.map((url, i) => ({ albumId: row.id, kind: "PHOTO" as const, url, sortOrder: i })) });
+  }
+
+  const member = await prisma.role.findUniqueOrThrow({ where: { name: "MEMBER" } });
+  const hash = await bcrypt.hash(password, 10);
+  let phone = 9000000201;
+  for (const m of demo.matrimony) {
+    const user = await prisma.user.upsert({
+      where: { email: m.email },
+      create: { email: m.email, name: m.name, passwordHash: hash, isEmailVerified: true, roleId: member.id },
+      update: { roleId: member.id, isEmailVerified: true },
+    });
+    const refs = await refsFor(m.location);
+    const gotra = m.gotraKey ? await prisma.gotra.findUnique({ where: { nameKey: m.gotraKey }, select: { id: true } }) : null;
+    const data = {
+      status: "PUBLISHED" as const,
+      verification: m.verified ? ("VERIFIED" as const) : ("UNVERIFIED" as const),
+      name: m.name,
+      gender: m.gender,
+      dateOfBirth: new Date(m.dob),
+      heightCm: m.height,
+      educationLevel: m.education,
+      education: m.educationText,
+      profession: m.profession,
+      income: m.income,
+      gotraId: gotra?.id ?? null,
+      fatherName: m.father,
+      about: m.about,
+      contactPhone: String(phone++),
+      ...refs,
+    };
+    await prisma.matrimonyProfile.upsert({ where: { userId: user.id }, create: { userId: user.id, code: m.code, ...data }, update: data });
+  }
 }
 
 async function seedEventsAndBusinesses(authorId: string) {
@@ -340,6 +471,7 @@ async function main() {
   await seedAccount("support@jangidsamaj.local", "Support Desk", password, "SUPPORT", undefined, fixed);
   await seedDemoContent(admin.id);
   await seedEventsAndBusinesses(admin.id);
+  await seedJobsGalleryMatrimony(admin.id, password);
   await seedAchievements(admin.id);
 
   console.log("\nSeed complete. Dev accounts (all verified):");
