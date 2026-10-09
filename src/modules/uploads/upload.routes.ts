@@ -12,6 +12,7 @@ import { requireActor, requirePermission } from "../../middleware/auth";
 import { noStore } from "../../middleware/httpCache";
 
 export const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
+const MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
 export const uploadRoot = path.resolve(env.uploadDir);
 
 /** Identify the real format from magic bytes; the client-declared MIME type and file name are ignored. */
@@ -71,6 +72,38 @@ uploadRouter.post(
   })
 );
 
+/** PDF documents (matrimony biodata). Only real PDFs by magic bytes, 2 MB max. */
+uploadRouter.post(
+  "/document",
+  requireActor,
+  noStore,
+  uploadLimiter,
+  requirePermission("media.upload"),
+  (req, res, next) =>
+    upload.single("file")(req, res, (err: unknown) => {
+      if (err instanceof multer.MulterError) {
+        return next(ApiError.badRequest(err.code === "LIMIT_FILE_SIZE" ? "Document must be 2 MB or smaller" : "Invalid upload", undefined, "INVALID_UPLOAD"));
+      }
+      next(err as Error | undefined);
+    }),
+  asyncHandler(async (req, res) => {
+    const file = req.file;
+    if (!file) throw ApiError.badRequest("Attach a PDF in the 'file' field", undefined, "INVALID_UPLOAD");
+    if (file.size > MAX_DOCUMENT_BYTES) throw ApiError.badRequest("Document must be 2 MB or smaller", undefined, "INVALID_UPLOAD");
+    if (file.buffer.length < 5 || file.buffer.toString("ascii", 0, 5) !== "%PDF-") throw ApiError.badRequest("Only PDF documents are allowed", undefined, "INVALID_UPLOAD");
+
+    const now = new Date();
+    const rel = path.posix.join(String(now.getUTCFullYear()), String(now.getUTCMonth() + 1).padStart(2, "0"), `${randomBytes(12).toString("hex")}.pdf`);
+    const abs = path.join(uploadRoot, rel);
+    await mkdir(path.dirname(abs), { recursive: true });
+    await writeFile(abs, file.buffer, { flag: "wx" });
+
+    const url = `${env.publicApiUrl}/uploads/${rel}`;
+    const media = await prisma.media.create({ data: { url, mime: "application/pdf", size: file.size, uploadedById: req.actor!.id }, select: { id: true, url: true, mime: true, size: true } });
+    res.status(201).json(media);
+  })
+);
+
 /**
  * Static serving for uploaded files. Names are random and never reused, so they can be cached forever.
  * The sandbox CSP + nosniff mean even a crafted file can never execute as a page on our origin.
@@ -81,7 +114,8 @@ export const serveUploads = express.static(uploadRoot, {
   immutable: true,
   maxAge: "365d",
   fallthrough: true,
-  setHeaders: (res) => {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith(".pdf")) res.setHeader("Content-Disposition", 'attachment; filename="biodata.pdf"');
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
     res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { paginationQuery } from "../../lib/pagination";
 import { imageUrl, locationPath, slugParam, youtubeUrl } from "../../lib/validators";
 
+export const ALBUM_CATEGORIES = ["EVENT", "SUCCESS_STORY", "INTERVIEW", "REEL", "COMMUNITY"] as const;
 export const MAX_ITEMS = 200;
 
 const boolQuery = z.enum(["true", "false"]).transform((v) => v === "true");
@@ -26,6 +27,7 @@ const item = z.discriminatedUnion("kind", [
 
 const fields = {
   slug: slugParam.optional(),
+  category: z.enum(ALBUM_CATEGORIES).optional(),
   coverUrl: imageUrl.nullable().optional(),
   takenOn: z.coerce.date().min(new Date("1950-01-01")).max(new Date(Date.now() + 24 * 3600_000)).nullable().optional(),
   eventSlug: slugParam.nullable().optional(),
@@ -43,6 +45,7 @@ export const updateAlbumSchema = z
   .refine((v) => Object.keys(v).length > 0, "Nothing to update");
 
 export const albumListQuery = paginationQuery.extend({
+  category: z.enum(ALBUM_CATEGORIES).optional(),
   location: locationPath.optional(),
   event: slugParam.optional(),
   q: z.string().trim().min(2).max(100).optional(),

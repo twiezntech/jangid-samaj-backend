@@ -149,6 +149,7 @@ const detailSelect = {
   prefAgeMin: true,
   prefAgeMax: true,
   prefNotes: true,
+  biodataUrl: true,
   contactPhone: true,
   contactWhatsapp: true,
   motherGotra: gotraRef,
@@ -175,7 +176,7 @@ export async function getByCode(actor: Actor, code: string) {
     relation = { sent: sent?.status ?? null, received: received?.status ?? null, receivedId: received?.id ?? null, shortlisted: !!sl, blocked: !!block };
   }
   const open = own || relation.sent === "ACCEPTED" || relation.received === "ACCEPTED";
-  const { userId, contactPhone, contactWhatsapp, photos, photoVisibility, dateOfBirth, ...rest } = p;
+  const { userId, contactPhone, contactWhatsapp, biodataUrl, photos, photoVisibility, dateOfBirth, ...rest } = p;
   void userId;
   const showPhotos = own || photoVisibility === "MEMBERS" || open;
   return {
@@ -185,6 +186,9 @@ export async function getByCode(actor: Actor, code: string) {
     photoLocked: !showPhotos && photos.length > 0,
     photoCount: photos.length,
     contact: open ? { phone: contactPhone, whatsapp: contactWhatsapp } : null,
+    /// Biodata is shared on the same terms as the phone number.
+    biodata: open ? biodataUrl : null,
+    hasBiodata: !!biodataUrl,
     own,
     relation,
     canInterest: !own && !!me && me.status === "PUBLISHED",
@@ -200,7 +204,7 @@ function clean(input: Partial<CreateProfileInput>) {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(input)) {
     if (k === "locationPath") continue;
-    out[k] = typeof v === "string" && !["gender", "maritalStatus", "manglik", "educationLevel", "income", "profileFor", "photoVisibility", "gotraId", "motherGotraId", "contactPhone", "contactWhatsapp"].includes(k) ? t(v) : v;
+    out[k] = typeof v === "string" && !["gender", "maritalStatus", "manglik", "educationLevel", "income", "profileFor", "photoVisibility", "gotraId", "motherGotraId", "contactPhone", "contactWhatsapp", "biodataUrl"].includes(k) ? t(v) : v;
   }
   if (typeof out.name === "string" && out.name.length < 2) throw ApiError.badRequest("Name must contain text", undefined, "EMPTY_CONTENT");
   return out;

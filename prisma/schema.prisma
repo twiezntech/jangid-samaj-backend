@@ -185,6 +185,7 @@ model User {
   albumsMade           Album[]                  @relation("AlbumCreator")
   notifications        Notification[]
   announcementsSent    Announcement[]           @relation("AnnouncementSender")
+  activityDays         UserActivityDay[]
   reportsFiled         ContentReport[]          @relation("ReportReporter")
   matrimonyProfile     MatrimonyProfile?
   adsCreated           Ad[]                     @relation("AdCreator")
@@ -1161,6 +1162,8 @@ model Album {
   id     String        @id @default(cuid())
   slug   String        @unique
   status ContentStatus @default(PENDING_REVIEW)
+  /// What kind of album this is, so success stories, interviews and reels get their own tabs.
+  category AlbumCategory @default(EVENT)
 
   coverUrl String?
   takenOn  DateTime? @db.Date
@@ -1191,6 +1194,7 @@ model Album {
 
   @@index([status, isFeatured, takenOn(sort: Desc)])
   @@index([eventId])
+  @@index([category, status])
   @@index([stateId, status])
   @@index([districtId, status])
   @@index([cityId, status])
@@ -1258,6 +1262,8 @@ model Notification {
 /// A broadcast written in the admin panel, delivered to every member (or the members of one area).
 model Announcement {
   id         String    @id @default(cuid())
+  /// Who receives it, on top of the optional area filter.
+  segment    AnnouncementSegment @default(EVERYONE)
   titleHi    String
   titleEn    String
   bodyHi     String?
@@ -1428,6 +1434,9 @@ model MatrimonyProfile {
   photos          String[]
   photoVisibility PhotoVisibility @default(MEMBERS)
 
+  /// Optional PDF biodata. Shown only where the phone number is shown (after an accepted interest).
+  biodataUrl String?
+
   contactPhone    String
   contactWhatsapp String?
 
@@ -1553,4 +1562,30 @@ model DailySearch {
   count Int      @default(0)
 
   @@id([day, term])
+}
+
+enum AlbumCategory {
+  EVENT
+  SUCCESS_STORY
+  INTERVIEW
+  REEL
+  COMMUNITY
+}
+
+enum AnnouncementSegment {
+  EVERYONE
+  BUSINESS_OWNERS
+  MATRIMONY_MEMBERS
+  EVENT_ATTENDEES
+}
+
+/// One row per signed-in member per day they used the website. Powers retention and active-user numbers;
+/// anonymous visitors are never recorded here.
+model UserActivityDay {
+  userId String
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  day    DateTime @db.Date
+
+  @@id([userId, day])
+  @@index([day])
 }

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { paginationQuery } from "../../lib/pagination";
-import { imageUrl, indianPhone, locationPath } from "../../lib/validators";
+import { documentUrl, imageUrl, indianPhone, locationPath } from "../../lib/validators";
 
 export const MARITAL = ["NEVER_MARRIED", "DIVORCED", "WIDOWED", "AWAITING_DIVORCE"] as const;
 export const PROFILE_FOR = ["SELF", "SON", "DAUGHTER", "BROTHER", "SISTER", "RELATIVE"] as const;
@@ -38,6 +38,7 @@ const fields = {
   prefAgeMax: age.nullable().optional(),
   prefNotes: text(1000),
   photos: z.array(imageUrl).max(MAX_PHOTOS).optional(),
+  biodataUrl: documentUrl.nullable().optional(),
   photoVisibility: z.enum(["MEMBERS", "ON_ACCEPT"]).optional(),
   contactPhone: indianPhone,
   contactWhatsapp: indianPhone.nullable().optional(),

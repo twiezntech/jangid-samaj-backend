@@ -25,6 +25,10 @@ export const emailField = z.string().trim().toLowerCase().email().max(254);
 /** Our own upload store. Built from env so a dev http:// origin works while production stays https-only. */
 export const isUploadUrl = (u: string) => /^\/uploads\/[\w/-]+\.(jpg|png|webp)$/.test(u.slice(env.publicApiUrl.length)) && u.startsWith(`${env.publicApiUrl}/`);
 
+/** Optional PDF documents (biodata) from our own upload store only. */
+export const isDocumentUrl = (u: string) => /^\/uploads\/[\w/-]+\.pdf$/.test(u.slice(env.publicApiUrl.length)) && u.startsWith(`${env.publicApiUrl}/`);
+export const documentUrl = z.string().trim().max(500).url().refine(isDocumentUrl, "Upload the PDF through the website");
+
 /** Images must be our own uploads or https URLs from allow-listed hosts (no hot-linking arbitrary/tracking hosts). */
 export const imageUrl = z
   .string()

@@ -24,6 +24,21 @@ locationRouter.get(
   })
 );
 
+/** Find a place by name in either language (global search, city pages). Districts and cities rank first. */
+locationRouter.get(
+  "/search",
+  publicCache(300),
+  asyncHandler(async (req, res) => {
+    const { q, limit } = z.object({ q: z.string().trim().min(2).max(60), limit: z.coerce.number().int().min(1).max(20).default(8) }).parse(req.query);
+    const rows = await prisma.location.findMany({
+      where: { isActive: true, OR: [{ nameEn: { contains: q, mode: "insensitive" } }, { nameHi: { contains: q } }] },
+      orderBy: [{ level: "asc" }, { nameEn: "asc" }],
+      take: limit,
+    });
+    res.json({ items: rows.map(toLocationDto) });
+  })
+);
+
 // Express 4 wildcard: everything after /detail/ is the slug path, e.g. /detail/rajasthan/jaipur
 locationRouter.get(
   "/detail/*",

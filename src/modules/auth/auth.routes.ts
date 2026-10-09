@@ -2,8 +2,9 @@ import { Request, Router } from "express";
 import rateLimit from "express-rate-limit";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { requireAuth } from "../../middleware/auth";
-import { REFRESH_COOKIE, clearAuthCookies, setAuthCookies } from "../../utils/cookies";
+import { ACCESS_COOKIE, REFRESH_COOKIE, clearAuthCookies, setAuthCookies } from "../../utils/cookies";
 import { requireHuman } from "../../middleware/human";
+import { verifyAccessToken } from "../../utils/jwt";
 import { forgotSchema, googleSchema, loginSchema, registerSchema, resendSchema, resetSchema, verifyEmailSchema } from "./auth.schemas";
 import * as auth from "./auth.service";
 
@@ -142,6 +143,27 @@ authRouter.post(
     await auth.logout(req.cookies?.[REFRESH_COOKIE]);
     clearAuthCookies(res);
     res.status(204).end();
+  })
+);
+
+/**
+ * Who am I, without ever answering 401: anonymous visitors get { user: null }, so the browser console
+ * stays clean on every public page. `refreshable` tells the site a silent refresh is worth trying.
+ */
+authRouter.get(
+  "/session",
+  asyncHandler(async (req, res) => {
+    let user = null;
+    const token = req.cookies?.[ACCESS_COOKIE];
+    if (token) {
+      try {
+        user = await auth.getMe(verifyAccessToken(token).sub);
+      } catch {
+        /* expired or invalid: treated as signed out */
+      }
+    }
+    res.set("Cache-Control", "no-store");
+    res.json({ user, refreshable: !user && !!req.cookies?.[REFRESH_COOKIE] });
   })
 );
 

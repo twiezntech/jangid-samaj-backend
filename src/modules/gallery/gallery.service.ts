@@ -1,4 +1,4 @@
-import type { ContentStatus, Prisma } from "@prisma/client";
+import type { AlbumCategory, ContentStatus, Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { ApiError } from "../../utils/apiError";
 import { Actor, can, inScope } from "../../lib/access";
@@ -22,6 +22,7 @@ const visible: Prisma.AlbumWhereInput = { status: "PUBLISHED" };
 
 const cardSelect = {
   slug: true,
+  category: true,
   coverUrl: true,
   takenOn: true,
   isFeatured: true,
@@ -50,12 +51,13 @@ async function counts(ids: string[]) {
 
 const publicEvent = (e: CardRow["event"]) => (e && e.status === "PUBLISHED" ? { slug: e.slug, translations: byLang(e.translations) } : null);
 
-export async function listPublic(p: { page: number; limit: number; location?: string; event?: string; q?: string; featured?: boolean; videos?: boolean }) {
+export async function listPublic(p: { page: number; limit: number; location?: string; event?: string; category?: AlbumCategory; q?: string; featured?: boolean; videos?: boolean }) {
   const where: Prisma.AlbumWhereInput = {
     AND: [
       visible,
       await locationWhere(p.location),
       p.event ? { event: { slug: p.event } } : {},
+      p.category ? { category: p.category } : {},
       p.featured !== undefined ? { isFeatured: p.featured } : {},
       p.videos ? { items: { some: { kind: "VIDEO" } } } : {},
       p.q ? { translations: { some: { title: { contains: p.q, mode: "insensitive" } } } } : {},
@@ -139,6 +141,7 @@ export async function createAlbum(actor: Actor, input: CreateAlbumInput, ip?: st
         slug,
         status,
         coverUrl: input.coverUrl ?? null,
+        category: input.category ?? "EVENT",
         takenOn: input.takenOn ?? null,
         eventId: eventId ?? null,
         isFeatured: manager && status === "PUBLISHED" ? input.isFeatured ?? false : false,
@@ -188,6 +191,7 @@ export async function updateAlbum(actor: Actor, id: string, input: UpdateAlbumIn
       where: { id },
       data: {
         ...(input.coverUrl !== undefined ? { coverUrl: input.coverUrl } : {}),
+        ...(input.category !== undefined ? { category: input.category } : {}),
         ...(input.takenOn !== undefined ? { takenOn: input.takenOn } : {}),
         ...(eventId !== undefined ? { eventId } : {}),
         ...(input.isFeatured !== undefined ? { isFeatured: input.isFeatured && current.status === "PUBLISHED" } : {}),
@@ -257,6 +261,7 @@ export async function listForManage(actor: Actor, p: { page: number; limit: numb
         status: true,
         isFeatured: true,
         coverUrl: true,
+        category: true,
         takenOn: true,
         rejectionReason: true,
         updatedAt: true,
