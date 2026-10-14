@@ -17,6 +17,10 @@ if (isProd && (jwtAccessSecret.length < 32 || jwtRefreshSecret.length < 32)) {
   throw new Error("JWT secrets must be at least 32 characters in production");
 }
 
+if (isProd && process.env.MOBILE_APP_KEY && process.env.MOBILE_APP_KEY.length < 24) {
+  throw new Error("MOBILE_APP_KEY must be at least 24 characters in production");
+}
+
 export const env = {
   nodeEnv,
   isProd,
@@ -34,6 +38,7 @@ export const env = {
   mailFrom: process.env.MAIL_FROM ?? "Jangid Samaj <onboarding@resend.dev>",
   resendApiKey: process.env.RESEND_API_KEY ?? "",
   turnstileSecret: process.env.TURNSTILE_SECRET_KEY ?? "",
+  mobileAppKey: process.env.MOBILE_APP_KEY ?? "",
   imageHosts: (process.env.IMAGE_HOSTS ?? "images.unsplash.com").split(",").map((h) => h.trim()).filter(Boolean),
   publicApiUrl: (process.env.PUBLIC_API_URL ?? `http://localhost:${process.env.PORT ?? 4000}`).replace(/\/$/, ""),
   uploadDir: process.env.UPLOAD_DIR ?? "uploads",

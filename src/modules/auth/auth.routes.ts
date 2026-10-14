@@ -1,11 +1,12 @@
-import { Request, Router } from "express";
+import { Request, Response, Router } from "express";
 import rateLimit from "express-rate-limit";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { requireAuth } from "../../middleware/auth";
 import { ACCESS_COOKIE, REFRESH_COOKIE, clearAuthCookies, setAuthCookies } from "../../utils/cookies";
 import { requireHuman } from "../../middleware/human";
 import { verifyAccessToken } from "../../utils/jwt";
-import { forgotSchema, googleSchema, loginSchema, registerSchema, resendSchema, resetSchema, verifyEmailSchema } from "./auth.schemas";
+import { isMobileClient } from "../../utils/mobileClient";
+import { forgotSchema, googleSchema, loginSchema, refreshTokenSchema, registerSchema, resendSchema, resetSchema, verifyEmailSchema } from "./auth.schemas";
 import * as auth from "./auth.service";
 
 const tooMany = { error: { message: "Too many requests. Please try again later." } };
@@ -25,6 +26,25 @@ const perEmailLimit = rateLimit({
 
 const meta = (req: Request) => ({ userAgent: req.headers["user-agent"], ip: req.ip });
 
+type Session = { user: unknown; accessToken: string; refreshToken: string };
+
+/** Website: tokens go into httpOnly cookies. Mobile app (X-Client: mobile): tokens go in the body, no cookies. */
+function sendSession(req: Request, res: Response, { user, accessToken, refreshToken }: Session) {
+  if (isMobileClient(req)) {
+    res.set("Cache-Control", "no-store");
+    return res.json({ user, accessToken, refreshToken });
+  }
+  setAuthCookies(res, accessToken, refreshToken);
+  res.json({ user });
+}
+
+/** The refresh token comes from the cookie (website) or the JSON body (mobile app). */
+const refreshTokenFrom = (req: Request): string | undefined => {
+  if (!isMobileClient(req)) return req.cookies?.[REFRESH_COOKIE];
+  const parsed = refreshTokenSchema.safeParse(req.body);
+  return parsed.success ? parsed.data.refreshToken : undefined;
+};
+
 export const authRouter = Router();
 
 authRouter.post(
@@ -41,9 +61,7 @@ authRouter.post(
   limiter(20),
   asyncHandler(async (req, res) => {
     const { token } = verifyEmailSchema.parse(req.body);
-    const { user, accessToken, refreshToken } = await auth.verifyEmail(token, meta(req));
-    setAuthCookies(res, accessToken, refreshToken);
-    res.json({ user });
+    sendSession(req, res, await auth.verifyEmail(token, meta(req)));
   })
 );
 
@@ -100,9 +118,7 @@ authRouter.post(
   perEmailLimit,
   requireHuman,
   asyncHandler(async (req, res) => {
-    const { user, accessToken, refreshToken } = await auth.login(loginSchema.parse(req.body), meta(req));
-    setAuthCookies(res, accessToken, refreshToken);
-    res.json({ user });
+    sendSession(req, res, await auth.login(loginSchema.parse(req.body), meta(req)));
   })
 );
 
@@ -111,9 +127,7 @@ authRouter.post(
   perIpLimit,
   asyncHandler(async (req, res) => {
     const { credential } = googleSchema.parse(req.body);
-    const { user, accessToken, refreshToken } = await auth.loginWithGoogle(credential, meta(req));
-    setAuthCookies(res, accessToken, refreshToken);
-    res.json({ user });
+    sendSession(req, res, await auth.loginWithGoogle(credential, meta(req)));
   })
 );
 
@@ -121,15 +135,13 @@ authRouter.post(
   "/refresh",
   limiter(120),
   asyncHandler(async (req, res) => {
-    const token = req.cookies?.[REFRESH_COOKIE];
+    const token = refreshTokenFrom(req);
     if (!token) {
       clearAuthCookies(res);
       return res.status(401).json({ error: { message: "Unauthorized" } });
     }
     try {
-      const { user, accessToken, refreshToken } = await auth.refreshSession(token, meta(req));
-      setAuthCookies(res, accessToken, refreshToken);
-      res.json({ user });
+      sendSession(req, res, await auth.refreshSession(token, meta(req)));
     } catch (err) {
       clearAuthCookies(res);
       throw err;
@@ -140,7 +152,7 @@ authRouter.post(
 authRouter.post(
   "/logout",
   asyncHandler(async (req, res) => {
-    await auth.logout(req.cookies?.[REFRESH_COOKIE]);
+    await auth.logout(refreshTokenFrom(req));
     clearAuthCookies(res);
     res.status(204).end();
   })

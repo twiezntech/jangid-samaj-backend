@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { ApiError } from "../utils/apiError";
+import { isTrustedMobileClient } from "../utils/mobileClient";
 import { verifyTurnstile } from "../utils/turnstile";
 
 /**
@@ -11,6 +12,7 @@ export async function requireHuman(req: Request, res: Response, next: NextFuncti
   if (typeof req.body?.website === "string" && req.body.website.length > 0) {
     return res.status(200).json({ needsVerification: true });
   }
+  if (isTrustedMobileClient(req)) return next(); // native app: no browser, so no Turnstile (see utils/mobileClient.ts)
   const ok = await verifyTurnstile(req.body?.turnstileToken, req.ip);
   if (!ok) return next(ApiError.badRequest("Human verification failed. Please try again.", undefined, "BOT_CHECK_FAILED"));
   next();

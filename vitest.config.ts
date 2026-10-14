@@ -18,6 +18,7 @@ export default defineConfig({
       NODE_ENV: "test",
       DATABASE_URL: testUrl,
       TURNSTILE_SECRET_KEY: "",
+      MOBILE_APP_KEY: "test-mobile-key-0123456789abcd",
       RESEND_API_KEY: "",
       GOOGLE_CLIENT_ID: "",
       LOG_LEVEL: "silent",

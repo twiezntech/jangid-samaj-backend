@@ -22,6 +22,11 @@ export const googleSchema = z.object({
   credential: z.string().min(20).max(4096),
 });
 
+/** Mobile only: the app keeps the opaque refresh token in the keychain and sends it in the body. */
+export const refreshTokenSchema = z.object({
+  refreshToken: z.string().regex(/^[a-f0-9]{96}$/, "Invalid token"),
+});
+
 export const verifyEmailSchema = z.object({
   token: z.string().regex(/^[a-f0-9]{96}$/, "Invalid token"),
 });
