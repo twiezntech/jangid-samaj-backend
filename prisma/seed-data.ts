@@ -693,7 +693,7 @@ const businesses: BusinessSeed[] = [
     slug: "vidya-coaching-sikar",
     category: "education",
     location: "rajasthan/sikar/sikar",
-    image: U("1523050854058-8df90110c9f1"),
+    image: U("1503676260728-1c00da094a0b"),
     phone: "9000000014",
     year: 2016,
     verified: true,
@@ -856,7 +856,7 @@ const albums: AlbumSeed[] = [
   },
   {
     slug: "pratibha-samman-samaroh-jodhpur", location: "rajasthan/jodhpur/jodhpur", takenDaysAgo: 75,
-    photos: [U("1523050854058-8df90110c9f1"), U("1531482615713-2afd69097998"), U("1521737604893-d14cc237f11d")],
+    photos: [U("1503676260728-1c00da094a0b"), U("1531482615713-2afd69097998"), U("1521737604893-d14cc237f11d")],
     hi: { title: "प्रतिभा सम्मान समारोह, जोधपुर", description: "10वीं और 12वीं के मेधावी विद्यार्थियों का सम्मान।" },
     en: { title: "Talent felicitation, Jodhpur", description: "Honouring the top students of classes 10 and 12." },
   },

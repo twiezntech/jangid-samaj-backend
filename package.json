@@ -15,6 +15,8 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "lint": "eslint src --ext .ts",
     "db:seed": "prisma db seed",
+    "demo:add": "tsx prisma/seed.ts --demo",
+    "demo:remove": "tsx prisma/seed.ts --demo-remove",
     "db:start": "node scripts/db.mjs start",
     "db:stop": "node scripts/db.mjs stop",
     "db:status": "node scripts/db.mjs status",

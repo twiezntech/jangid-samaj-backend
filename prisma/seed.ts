@@ -3,6 +3,8 @@
  *  - RBAC (permissions + roles) and location master data are always seeded.
  *  - Demo content + dev accounts are seeded outside production only (or with SEED_DEMO=true).
  *  - In production a super admin is created only from SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD.
+ *  - `--demo` adds only the sample content (no staff accounts), e.g. for a client walkthrough.
+ *    `--demo-remove` deletes exactly those sample rows again.
  */
 import bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
@@ -441,7 +443,51 @@ async function seedEventsAndBusinesses(authorId: string) {
   }
 }
 
+/** News dates in the sample data are fixed; move them so the newest story is a few hours old. */
+function freshenNewsDates() {
+  const newest = Math.max(...demo.news.map((n) => new Date(n.publishedAt).getTime()));
+  const shift = Date.now() - 3 * 60 * 60 * 1000 - newest;
+  for (const n of demo.news) n.publishedAt = new Date(new Date(n.publishedAt).getTime() + shift).toISOString();
+}
+
+async function addDemoContent() {
+  const author = await prisma.user.findFirst({ where: { role: { name: "SUPER_ADMIN" } }, orderBy: { createdAt: "asc" } });
+  if (!author) throw new Error("No super admin found. Run `npm run prisma:seed` with SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD first.");
+  await seedLocations();
+  await seedTaxonomy();
+  await seedGotra();
+  freshenNewsDates();
+  await seedDemoContent(author.id);
+  await seedEventsAndBusinesses(author.id);
+  // The sample matrimony members get an unguessable password nobody knows: they cannot be used to sign in.
+  await seedJobsGalleryMatrimony(author.id, randomBytes(24).toString("hex"));
+  await seedAchievements(author.id);
+  console.log("Demo content added. Remove it with: npm run demo:remove");
+}
+
+/** Deletes only rows whose slug / email comes from seed-data.ts. Master data and real content stay. */
+async function removeDemoContent() {
+  const slugs = (rows: { slug: string }[]) => ({ where: { slug: { in: rows.map((r) => r.slug) } } });
+  // Children first: albums point at events, jobs at businesses, events and leaders at directory entries.
+  const results = await prisma.$transaction([
+    prisma.album.deleteMany(slugs(demo.albums)),
+    prisma.job.deleteMany(slugs(demo.jobs)),
+    prisma.achievement.deleteMany(slugs(demo.achievements)),
+    prisma.obituary.deleteMany(slugs(demo.obituaries)),
+    prisma.user.deleteMany({ where: { email: { in: demo.matrimony.map((m) => m.email) } } }),
+    prisma.business.deleteMany(slugs(demo.businesses)),
+    prisma.event.deleteMany(slugs(demo.events)),
+    prisma.leaderProfile.deleteMany(slugs(demo.leaders)),
+    prisma.directoryEntry.deleteMany(slugs(demo.directory)),
+    prisma.news.deleteMany(slugs(demo.news)),
+  ]);
+  const names = ["albums", "jobs", "achievements", "obituaries", "matrimony members", "businesses", "events", "leaders", "directory entries", "news"];
+  results.forEach((r, i) => console.log(`Removed ${r.count} ${names[i]}`));
+}
+
 async function main() {
+  if (process.argv.includes("--demo-remove")) return removeDemoContent();
+  if (process.argv.includes("--demo")) return addDemoContent();
   await seedRbac();
   await seedLocations();
   await seedTaxonomy();
